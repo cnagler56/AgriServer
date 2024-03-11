@@ -8,7 +8,7 @@ public class AgriServerApplication {
 
 	public static void main(String[] args) {
 		SpringApplication.run(AgriServerApplication.class, args);
-		System.out.println("........................Running...................");
+		System.out.println("..........................Running........................");
 	}
 
 }
