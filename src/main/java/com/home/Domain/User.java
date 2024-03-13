@@ -19,8 +19,9 @@ public class User {
 	@Column(name="id")
 	Long userId;
 	
-	@JsonProperty
+	
 	@Column(name="first_name")
+	@JsonProperty
 	String firstName;
 	
 	@JsonProperty
