@@ -36,7 +36,14 @@ public class IndexController {
 	@GetMapping("/posts")
 	   public Iterable<Post> post() {
      return this.postService.getPosts();
+     
  }
+	
+//    @GetMapping("/filteredPosts") 
+//    public Iterable<Post> getCertain (String title, String state){
+//   	 return this.postService.getFiltered(title, state);
+//    }
+    
 	@GetMapping("/beans")
 	   public Iterable<Beans> beans() {
 		return this.grainService.getBeans();
@@ -53,6 +60,9 @@ public class IndexController {
 	}
 	
 	
-//	@PostMapping("/postUsers")
+	@PostMapping("/addpost")
+	public void addPost(@RequestBody Post post) {
+		this.postService.addPost(post);
+	}
 	
 }
