@@ -21,13 +21,50 @@ public class Post {
 	String title;
 	
 	@JsonProperty
-	String body;
+	String content;
+	
+	@JsonProperty
+	String name;
+	
+	@JsonProperty
+	String city;
+	
+	@JsonProperty
+	String state;
 	
 	@JsonProperty
 	String time;
 
 	@JsonProperty
 	Long userId;
+	
+	
+	
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
+	public String getCity() {
+		return city;
+	}
+
+	public void setCity(String city) {
+		this.city = city;
+	}
+
+	public String getState() {
+		return state;
+	}
+
+	public void setState(String state) {
+		this.state = state;
+	}
+
+
 
 	public Long getIdposts() {
 		return idposts;
@@ -45,12 +82,12 @@ public class Post {
 		this.title = title;
 	}
 
-	public String getBody() {
-		return body;
+	public String getContent() {
+		return content;
 	}
 
-	public void setBody(String body) {
-		this.body = body;
+	public void setContent(String content) {
+		this.content = content;
 	}
 
 	public String getTime() {

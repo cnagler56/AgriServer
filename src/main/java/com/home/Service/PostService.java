@@ -22,6 +22,10 @@ public class PostService {
         return this.postRepository.findAll();
     }
     
+    public Post getfullPost(Long idposts) {
+        return this.postRepository.findByIdposts(idposts);
+    }
+    
 //    public List<Post> getFiltered(String title, String state) {
 //    	return this.postRepository.findByTitleandState(title, state);
 //    }
