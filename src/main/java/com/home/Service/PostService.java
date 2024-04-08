@@ -26,9 +26,14 @@ public class PostService {
         return this.postRepository.findByIdposts(idposts);
     }
     
-//    public List<Post> getFiltered(String title, String state) {
-//    	return this.postRepository.findByTitleandState(title, state);
-//    }
+    public Iterable <Post> getPostsbylocation(String state) {
+    	if(state == "All" || state == null) {
+    		return this.postRepository.findAll();
+    	}
+    	return (Iterable<Post>) this.postRepository.findByState(state);
+    }
+    
+
     
     public void addPost(Post post) {
     	this.postRepository.save(post);

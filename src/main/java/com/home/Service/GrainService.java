@@ -7,9 +7,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestBody;
 
+import com.home.Domain.BeanGuess;
 import com.home.Domain.Beans;
 import com.home.Domain.CornGuess;
 import com.home.Domain.CornYields;
+import com.home.Repository.BeanGuessRepository;
 import com.home.Repository.CornRepository;
 import com.home.Repository.CornYieldRepository;
 import com.home.Repository.GrainRepository;
@@ -21,11 +23,14 @@ public class GrainService {
 	private final GrainRepository grainRepository;
 	private final CornRepository repo;
 	private final CornYieldRepository cornrepo;
+	private final BeanGuessRepository repoBeans;
 	
-	public GrainService(GrainRepository grainRepository, CornRepository repo, CornYieldRepository cornrepo) {
+	public GrainService(GrainRepository grainRepository, CornRepository repo, 
+			CornYieldRepository cornrepo, BeanGuessRepository repoBeans) {
 		this.grainRepository = grainRepository;
 		this.repo = repo;
 		this.cornrepo = cornrepo;
+		this.repoBeans = repoBeans;
 	}
 
 	 public ResponseEntity<String> addCornYield(CornGuess cornGuess) {
@@ -45,5 +50,9 @@ public class GrainService {
     
     public List<CornYields> getCorn() {
         return this.repo.findAll();
+    }
+    
+    public void addBeanGuess(BeanGuess beanGuess) {
+    	this.repoBeans.save(beanGuess);
     }
 }

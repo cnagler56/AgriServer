@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.home.Domain.BeanGuess;
 import com.home.Domain.Beans;
 import com.home.Domain.CornGuess;
 import com.home.Domain.CornYields;
@@ -95,6 +96,11 @@ public class IndexController {
 		   System.out.println(cornGuess);
 	      this.grainService.addCornYield(cornGuess);
 	    }
+	   
+	   @PostMapping("/beanGuess")
+	   public void beanguess(@RequestBody BeanGuess beanGuess) {
+		   this.grainService.addBeanGuess(beanGuess);
+	   }
 	
 	@PostMapping("/addpost")
 	public void addPost(@RequestBody Post post) {

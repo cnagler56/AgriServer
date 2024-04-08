@@ -29,6 +29,7 @@ public class User {
 	String lastName;
 	 
 	@JsonProperty
+	public
 	String email;
 	
 	@JsonProperty

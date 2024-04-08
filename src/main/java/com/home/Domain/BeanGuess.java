@@ -1,28 +1,25 @@
 package com.home.Domain;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import jakarta.persistence.CollectionTable;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 
 @Entity
-public class CornGuess {
-	
+public class BeanGuess {
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@JsonProperty
 	private Long id;
 	
-	@ElementCollection
-//    @CollectionTable(name="this")
-    private  List <Integer> yieldValues = new ArrayList <Integer>();
+	@JsonProperty
+	private int nationalGuess;
+	
+	@JsonProperty
+	private int myState;
 	
 	@JsonProperty
 	private Long userId;
@@ -35,12 +32,20 @@ public class CornGuess {
 		this.id = id;
 	}
 
-	public List<Integer> getYieldValues() {
-		return yieldValues;
+	public int getNationalGuess() {
+		return nationalGuess;
 	}
 
-	public void setYieldValues(List<Integer> yieldValues) {
-		this.yieldValues = yieldValues;
+	public void setNationalGuess(int nationalGuess) {
+		this.nationalGuess = nationalGuess;
+	}
+
+	public int getMyState() {
+		return myState;
+	}
+
+	public void setMyState(int myState) {
+		this.myState = myState;
 	}
 
 	public Long getUserId() {
@@ -50,10 +55,6 @@ public class CornGuess {
 	public void setUserId(Long userId) {
 		this.userId = userId;
 	}
-    
-
-
-
-        
-
+	
+	
 }
