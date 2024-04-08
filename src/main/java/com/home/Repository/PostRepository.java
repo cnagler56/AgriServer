@@ -12,6 +12,7 @@ import com.home.Domain.Post;
 public interface PostRepository extends JpaRepository<Post, Long> {
 	
 //	@Query("SELECT userId FROM posts INNER JOIN users ON posts.userId = users.id WHERE posts.title = {title} AND users.state = {state}")
-//	List <Post> findByTitleandState(String title, String state);
-		
+
+	Post findByIdposts(Long idposts);	
+	List<Post> findByState(String state);
 }
