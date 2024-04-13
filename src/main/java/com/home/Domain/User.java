@@ -16,7 +16,7 @@ public class User {
 	@Id
 	@GeneratedValue(strategy=GenerationType.SEQUENCE)
 	@JsonProperty
-	@Column(name="id")
+	@Column(name="userid")
 	Long userId;
 	
 	
@@ -27,6 +27,9 @@ public class User {
 	@JsonProperty
 	@Column(name="last_name")
 	String lastName;
+	
+	@JsonProperty
+	String name;
 	 
 	@JsonProperty
 	public

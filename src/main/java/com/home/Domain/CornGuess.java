@@ -1,12 +1,15 @@
 package com.home.Domain;
 
-import java.util.ArrayList;
-import java.util.List;
+
+
+import java.sql.Date;
+import java.time.LocalDate;
+
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import jakarta.persistence.CollectionTable;
-import jakarta.persistence.ElementCollection;
+
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -20,12 +23,75 @@ public class CornGuess {
 	@JsonProperty
 	private Long id;
 	
-	@ElementCollection
-//    @CollectionTable(name="this")
-    private  List <Integer> yieldValues = new ArrayList <Integer>();
+	@JsonProperty
+	String grain;
+	
+	@JsonProperty
+	@Column(name="date")
+	LocalDate date;
+		
+	@JsonProperty
+	@Column(name="yield_guess")
+	public String yiel;
+	
+	@JsonProperty
+	public String name;
+	
+	@JsonProperty
+	public String state;
+	
+	@JsonProperty
+	public String interest;
 	
 	@JsonProperty
 	private Long userId;
+	
+
+	
+	
+	
+
+	public String getGrain() {
+		return grain;
+	}
+
+	public void setGrain(String grain) {
+		this.grain = grain;
+	}
+
+
+
+	public String getYiel() {
+		return yiel;
+	}
+
+	public void setYiel(String yiel) {
+		this.yiel = yiel;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
+	public String getState() {
+		return state;
+	}
+
+	public void setState(String state) {
+		this.state = state;
+	}
+
+	public String getInterest() {
+		return interest;
+	}
+
+	public void setInterest(String interest) {
+		this.interest = interest;
+	}
 
 	public Long getId() {
 		return id;
@@ -35,13 +101,6 @@ public class CornGuess {
 		this.id = id;
 	}
 
-	public List<Integer> getYieldValues() {
-		return yieldValues;
-	}
-
-	public void setYieldValues(List<Integer> yieldValues) {
-		this.yieldValues = yieldValues;
-	}
 
 	public Long getUserId() {
 		return userId;
@@ -50,10 +109,13 @@ public class CornGuess {
 	public void setUserId(Long userId) {
 		this.userId = userId;
 	}
+
+
+	}
     
 
 
 
         
 
-}
+

@@ -1,5 +1,6 @@
 package com.home.Controller;
 
+import java.util.List;
 import java.util.UUID;
 
 
@@ -58,11 +59,11 @@ public class IndexController {
   
 }
 	
-	
-//    @GetMapping("/filteredPosts") 
-//    public Iterable<Post> getCertain (String title, String state){
-//   	 return this.postService.getFiltered(title, state);
-//    }
+	@GetMapping("/cornestimates")
+	public List <CornGuess> cornGuess() {
+		return this.grainService.getCornGuess();
+	}
+
     
 	@GetMapping("/beans")
 	   public Iterable<Beans> beans() {
@@ -76,7 +77,7 @@ public class IndexController {
 	
 	@PostMapping("/register")
 	public void register(@RequestBody User user) {
-	
+	System.out.println(user);
 		this.userService.saveUser(user);
 	}
 	
@@ -93,7 +94,6 @@ public class IndexController {
 	
 	   @PostMapping("/cornGuess")
 	    public void recordGuess (@RequestBody CornGuess cornGuess) {
-		   System.out.println(cornGuess);
 	      this.grainService.addCornYield(cornGuess);
 	    }
 	   

@@ -35,8 +35,7 @@ public class GrainService {
 
 	 public ResponseEntity<String> addCornYield(CornGuess cornGuess) {
 	        try {
-	         System.out.println(cornGuess);
-	        	cornrepo.save(cornGuess); // Save the received CornYield object to the database
+	        	cornrepo.save(cornGuess);  
 	            return new ResponseEntity<>("Data inserted successfully", HttpStatus.OK);
 	        } catch (Exception e) {
 	            e.printStackTrace();
@@ -48,11 +47,17 @@ public class GrainService {
         return this.grainRepository.findAll();
     }
     
+
+    
     public List<CornYields> getCorn() {
         return this.repo.findAll();
     }
     
     public void addBeanGuess(BeanGuess beanGuess) {
     	this.repoBeans.save(beanGuess);
+    }
+    
+    public List<CornGuess> getCornGuess() {
+    	return this.cornrepo.findAll();
     }
 }
