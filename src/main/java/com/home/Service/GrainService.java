@@ -24,13 +24,15 @@ public class GrainService {
 	private final CornRepository repo;
 	private final CornYieldRepository cornrepo;
 	private final BeanGuessRepository repoBeans;
+	private final ApiService apiService;
 	
 	public GrainService(GrainRepository grainRepository, CornRepository repo, 
-			CornYieldRepository cornrepo, BeanGuessRepository repoBeans) {
+			CornYieldRepository cornrepo, BeanGuessRepository repoBeans, ApiService apiService) {
 		this.grainRepository = grainRepository;
 		this.repo = repo;
 		this.cornrepo = cornrepo;
 		this.repoBeans = repoBeans;
+		this.apiService = apiService;
 	}
 
 	 public ResponseEntity<String> addCornYield(CornGuess cornGuess) {
@@ -60,4 +62,5 @@ public class GrainService {
     public List<CornGuess> getCornGuess() {
     	return this.cornrepo.findAll();
     }
+    
 }

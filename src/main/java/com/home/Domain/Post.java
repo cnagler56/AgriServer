@@ -1,7 +1,10 @@
 package com.home.Domain;
 
+import java.time.LocalDateTime;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -33,7 +36,8 @@ public class Post {
 	String state;
 	
 	@JsonProperty
-	String time;
+	@Column(name="date")
+	LocalDateTime date;
 
 	@JsonProperty
 	Long userId;
@@ -90,13 +94,7 @@ public class Post {
 		this.content = content;
 	}
 
-	public String getTime() {
-		return time;
-	}
 
-	public void setTime(String time) {
-		this.time = time;
-	}
 
 	public Long getUserId() {
 		return userId;

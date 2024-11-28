@@ -4,7 +4,7 @@ package com.home.Domain;
 
 import java.sql.Date;
 import java.time.LocalDate;
-
+import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -28,7 +28,7 @@ public class CornGuess {
 	
 	@JsonProperty
 	@Column(name="date")
-	LocalDate date;
+	LocalDateTime date;
 		
 	@JsonProperty
 	@Column(name="yield_guess")

@@ -3,7 +3,10 @@ package com.home.Controller;
 import java.util.List;
 import java.util.UUID;
 
+import javax.security.auth.login.AccountNotFoundException;
 
+import org.springframework.http.ResponseEntity;
+//import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,9 +18,9 @@ import com.home.Domain.BeanGuess;
 import com.home.Domain.Beans;
 import com.home.Domain.CornGuess;
 import com.home.Domain.CornYields;
+import com.home.Domain.LoginDTO;
 import com.home.Domain.Post;
 import com.home.Domain.User;
-
 import com.home.Service.GrainService;
 import com.home.Service.PostService;
 import com.home.Service.UserService;
@@ -30,18 +33,28 @@ public class IndexController {
 	private final PostService postService;
 	private final GrainService grainService;
 	
+
 	
 	public IndexController(UserService userService, PostService postService, GrainService grainService) {
 		this.userService = userService;
 		this.postService = postService;
 		this.grainService = grainService;
+	 
 		 
 	}
+    
+
 	
 	@GetMapping("/user")
 	   public Iterable<User> users() {
         return this.userService.getList();
     }
+	
+	@GetMapping("/abcd")
+	   public Iterable<User> user() {
+     return this.userService.getList();
+ }
+
 	
 	@GetMapping("/posts")
 	   public Iterable<Post> post() {
@@ -52,6 +65,8 @@ public class IndexController {
 //	public Iterable<Post> post(@RequestParam String state) {
 //		return this.postService.getPostsbylocation(state);
 //	}
+	
+
 	
 	@GetMapping("/post/{idposts}")
 	   public Post posta(@RequestParam Long idposts) {
@@ -75,21 +90,19 @@ public class IndexController {
 		return this.grainService.getCorn();
 }
 	
-	@PostMapping("/register")
-	public void register(@RequestBody User user) {
-	System.out.println(user);
-		this.userService.saveUser(user);
-	}
+
 	
-//	@GetMapping("/login")
-//	public UUID login(@RequestParam String email, @RequestParam String password) {
-//		return this.userService.login(email,password);
-//	}
+	@GetMapping("/getIn")
+	public UUID get(@RequestBody LoginDTO use) {
+		return this.userService.getIn(use);
+	}
 	
 	@GetMapping("/login")
 	public User login(@RequestParam String email, @RequestParam String password) {
 		return this.userService.login(email,password);
 	}
+	
+
 	
 	
 	   @PostMapping("/cornGuess")
