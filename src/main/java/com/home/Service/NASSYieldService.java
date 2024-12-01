@@ -1,12 +1,10 @@
 package com.home.Service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.home.Domain.NASSYieldData;
-import com.home.Repository.NASSYieldDataRepository;
-
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,52 +16,150 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import com.home.Domain.CombinedYieldData;
+import com.home.Domain.NASSYieldData;
+import com.home.Repository.NASSYieldDataRepository;
+import com.home.Service.ApiResponse.ApiItem;
+
+
 @Service
 public class NASSYieldService {
 	
     @Value("${usda.api.key}")
     private String apiKey;
 
-    	
-        @Autowired
-        private NASSYieldDataRepository nASSYieldDataRepository;
+//    private static final String YIELD_API_URL = "https://quickstats.nass.usda.gov/api/api_GET/?key={apiKey}&commodity_desc=CORN&&year=2020&statisticcat_desc=YIELD";
+//    private static final String ACRES_API_URL = "https://quickstats.nass.usda.gov/api/api_GET/?key={apiKey}&commodity_desc=CORN&statisticcat_desc=ACRES";
+//    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
-        @Autowired
-        private RestTemplate restTemplate;
+    private final RestTemplate restTemplate;
+    private final NASSYieldDataRepository yieldDataRepository;
 
+    public NASSYieldService(RestTemplate restTemplate, NASSYieldDataRepository yieldDataRepository) {
+        this.restTemplate = restTemplate;
+        this.yieldDataRepository = yieldDataRepository;
+    }
+
+
+//        private static final String API_URL = "https://quickstats.nass.usda.gov/api/api_GET/?key={apiKey}";
         
 
-        public List<NASSYieldData> fetchAndSaveNASSYieldData(String grain, String month, String year) {
-            // Fetch data from the external API
-        	
-            String url = UriComponentsBuilder.fromHttpUrl("https://quickstats.nass.usda.gov/api/api_GET/")
-                    .queryParam("key", apiKey)             // API key
-                    .queryParam("commodity_desc", grain)  // Commodity description
-                    .queryParam("reference_period_desc", month) // Statistic category description
-                    .queryParam("year", year)           // Year for the data
-                    .toUriString();
-        	
+        /**
+         * Fetch data from NASS API with dynamic parameters.
+         *
+         * @param commodity   e.g., "CORN", "SOYBEANS", "WHEAT"
+         * @param year        e.g., 2023
+         * @param month       e.g., "AUG"
+         * @param statistic   e.g., "YIELD" or "ACRES"
+         * @return ApiResponse containing fetched data
+         */
+        public ApiResponse fetchDataWithParameters(String commodity, String month, String year, String statistic) {
+        	System.out.println("....................................");
+        	String url = UriComponentsBuilder.fromHttpUrl("https://quickstats.nass.usda.gov/api/api_GET/")
+        		    .queryParam("key", apiKey)
+        		    .queryParam("commodity_desc", commodity)
+        		    .queryParam("year", year)
+//        		    .queryParam("reference_period_desc", month)
+        		    .queryParam("statisticcat_desc", statistic)
+        		    .toUriString();
         	System.out.println(url);
-            ResponseEntity<CornYieldResponse> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                null,
-                new ParameterizedTypeReference<CornYieldResponse>() {}
-            );
-            System.out.println(response.getBody().getData());
-            if (response.getBody() != null) {
-            	List<NASSYieldData> data = response.getBody().getData();
-            	data.forEach(d -> {
-            	    if (d.getYield() == null) {
-            	        d.setYield("0");  
-            	    }
-            	});
-//                cornYieldDataRepository.saveAll(data);
+        	System.out.println("...........................................");
+        	
+            Map<String, String> params = new HashMap<>();
+            params.put("commodity", commodity);
+            params.put("year", String.valueOf(year));
+            params.put("month", month);
+            params.put("statistic", statistic);
 
-                return data;
+            return restTemplate.getForObject(url, ApiResponse.class, params);
+        }
+
+        /**
+         * Fetch yield and acres data, consolidate, and save to database.
+         */
+        public void fetchAndSaveMostRecentData() {
+            String[] commodities = {"CORN", "SOYBEANS", "WHEAT"};
+            String[] statistics = {"YIELD", "ACRES"};
+
+            for (String commodity : commodities) {
+                // Fetch YIELD data
+                ApiResponse yieldResponse = fetchDataWithParameters(commodity, "2024",  "NOV", "YIELD");
+
+                // Fetch ACRES data
+                ApiResponse acresResponse = fetchDataWithParameters(commodity, "2024", "NOV", "YIELD");
+
+                if (yieldResponse != null && acresResponse != null) {
+                    consolidateAndSave(yieldResponse, acresResponse);
+                }
+            }
+        }
+        public List<NASSYieldData> fetchNASSYieldData (String grain, String month, String year){
+            ApiResponse yieldResponse = fetchDataWithParameters(grain, month, year, "YIELD");
+            ApiResponse acresResponse = fetchDataWithParameters(grain, month, year, "YIELD");
+             
+                return consolidate(yieldResponse, acresResponse);
+        }
+        
+
+        /**
+         * Consolidates yield and acres data and saves to the database.
+         *
+         * @param yieldResponse ApiResponse for yield
+         * @param acresResponse ApiResponse for acres
+         */
+        private void consolidateAndSave(ApiResponse yieldResponse, ApiResponse acresResponse) {
+            Map<String, String> acresMap = new HashMap<>();
+            if (acresResponse.getData() != null) {
+                for (ApiItem acresItem : acresResponse.getData()) {
+                    acresMap.put(acresItem.getState(), acresItem.getYield());
+                }
             }
 
-            throw new RuntimeException("Failed to fetch data from USDA API");
+
+            if (yieldResponse.getData() != null) {
+                for (ApiItem yieldItem : yieldResponse.getData()) {
+                    NASSYieldData entity = new NASSYieldData();
+                    entity.setCommodity(yieldItem.getCommodity());
+                    entity.setState(yieldItem.getState());
+                    entity.setYield(yieldItem.getYield());
+                    entity.setAcresValue(acresMap.getOrDefault(yieldItem.getState(), "N/A")); // Match state for acres
+                    entity.setLoadTime(yieldItem.getLoad_time());
+
+                    yieldDataRepository.save(entity); // Save to the database
+                }
+            }      
         }
+        
+        private List<NASSYieldData> consolidate(ApiResponse yieldResponse, ApiResponse acresResponse) {
+            Map<String, String> acresMap = new HashMap<>();
+
+            // Map state to acres from acresResponse
+            if (acresResponse != null && acresResponse.getData() != null) {
+                for (ApiResponse.ApiItem acresItem : acresResponse.getData()) {
+                    acresMap.put(acresItem.getState(), acresItem.getYield()); // Assuming "getYield" for acres value
+                }
+            }
+
+            List<NASSYieldData> consolidatedData = new ArrayList<>();
+
+            // Consolidate yield data with acres data
+            if (yieldResponse != null && yieldResponse.getData() != null) {
+                for (ApiResponse.ApiItem yieldItem : yieldResponse.getData()) {
+                    NASSYieldData entity = new NASSYieldData();
+                    entity.setCommodity(yieldItem.getCommodity());
+                    entity.setState(yieldItem.getState());
+                    entity.setYield(yieldItem.getYield());
+                    entity.setAcresValue(acresMap.getOrDefault(yieldItem.getState(), "N/A")); // Match state for acres
+                    entity.setLoadTime(yieldItem.getLoad_time());
+
+                    consolidatedData.add(entity); 
+                }
+            }
+
+            return consolidatedData; 
+        }
+
     }
+    
+
 
