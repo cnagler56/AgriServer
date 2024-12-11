@@ -54,7 +54,7 @@ public class NASSYieldService {
          * @return ApiResponse containing fetched data
          */
         public ApiResponse fetchDataWithParameters(String commodity, String month, String year, String statistic) {
-        	System.out.println("....................................");
+        	fetchAndSaveMostRecentData();
         	String url = UriComponentsBuilder.fromHttpUrl("https://quickstats.nass.usda.gov/api/api_GET/")
         		    .queryParam("key", apiKey)
         		    .queryParam("commodity_desc", commodity)
@@ -62,8 +62,6 @@ public class NASSYieldService {
 //        		    .queryParam("reference_period_desc", month)
         		    .queryParam("statisticcat_desc", statistic)
         		    .toUriString();
-        	System.out.println(url);
-        	System.out.println("...........................................");
         	
             Map<String, String> params = new HashMap<>();
             params.put("commodity", commodity);
@@ -77,21 +75,44 @@ public class NASSYieldService {
         /**
          * Fetch yield and acres data, consolidate, and save to database.
          */
+//        public void fetchAndSaveMostRecentData() {
+//            String[] commodities = {"CORN", "SOYBEANS", "WHEAT"};
+//            String[] statistics = {"YIELD", "ACRES"};
+//
+//            for (String commodity : commodities) {
+//                // Fetch YIELD data
+//                ApiResponse yieldResponse = fetchDataWithParameters(commodity, "2024",  "NOV", "YIELD");
+//
+//                // Fetch ACRES data
+//                ApiResponse acresResponse = fetchDataWithParameters(commodity, "2024", "NOV", "ACRES");
+//
+//                if (yieldResponse != null && acresResponse != null) {
+//                    consolidateAndSave(yieldResponse, acresResponse);
+//                }
+//            }
+//        }
+        
         public void fetchAndSaveMostRecentData() {
             String[] commodities = {"CORN", "SOYBEANS", "WHEAT"};
-            String[] statistics = {"YIELD", "ACRES"};
+            String statistics = "YIELD";
 
             for (String commodity : commodities) {
                 // Fetch YIELD data
                 ApiResponse yieldResponse = fetchDataWithParameters(commodity, "2024",  "NOV", "YIELD");
+                
+                if (yieldResponse.getData() != null) {
+                    for (ApiItem yieldItem : yieldResponse.getData()) {
+                        NASSYieldData entity = new NASSYieldData();
+                        entity.setCommodity(yieldItem.getCommodity());
+                        entity.setState(yieldItem.getState());
+                        entity.setYield(yieldItem.getYield());
+                        entity.setLoadTime(yieldItem.getLoad_time());
 
-                // Fetch ACRES data
-                ApiResponse acresResponse = fetchDataWithParameters(commodity, "2024", "NOV", "YIELD");
+                        yieldDataRepository.save(entity); 
 
-                if (yieldResponse != null && acresResponse != null) {
-                    consolidateAndSave(yieldResponse, acresResponse);
-                }
-            }
+                    }}
+            
+        }
         }
         public List<NASSYieldData> fetchNASSYieldData (String grain, String month, String year){
             ApiResponse yieldResponse = fetchDataWithParameters(grain, month, year, "YIELD");

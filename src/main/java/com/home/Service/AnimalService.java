@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import com.home.Domain.CattleData;
+import com.home.Domain.CattleResponse;
 import com.home.Domain.HogResponse;
 import com.home.Domain.HogsData;
 import com.home.Domain.NASSYieldData;
@@ -52,6 +54,39 @@ public class AnimalService {
         System.out.println(response.getBody().getData());
         if (response.getBody() != null) {
             List<HogsData> data = response.getBody().getData();
+            data.forEach(d -> {
+
+            });
+
+
+            return data;
+        }
+
+        throw new RuntimeException("Failed to fetch data from USDA API");
+    }
+    
+    public List<CattleData> fetchCattleOnFeedReport(String month, String year) {
+     
+        
+        String url = UriComponentsBuilder.fromHttpUrl("https://quickstats.nass.usda.gov/api/api_GET/")
+                .queryParam("key", apiKey)             
+                .queryParam("sector", "ANIMALS+%26+PRODUCTS")   
+                .queryParam("group", "CATTLE")
+                .queryParam("commodity_desc", "HOGS")
+                .queryParam("statisticcat_desc", "INVENTORY")
+                .queryParam("month", month)
+                .queryParam("year", year)          
+                .toUriString();
+        
+        ResponseEntity<CattleResponse> response = restTemplate.exchange(
+            url,
+            HttpMethod.GET,
+            null,
+            new ParameterizedTypeReference<CattleResponse>() {}
+        );
+        System.out.println(response.getBody().getData());
+        if (response.getBody() != null) {
+            List<CattleData> data = response.getBody().getData();
             data.forEach(d -> {
 
             });
