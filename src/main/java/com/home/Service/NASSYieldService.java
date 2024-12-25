@@ -54,7 +54,7 @@ public class NASSYieldService {
          * @return ApiResponse containing fetched data
          */
         public ApiResponse fetchDataWithParameters(String commodity, String month, String year, String statistic) {
-        	fetchAndSaveMostRecentData();
+//        	fetchAndSaveMostRecentData();
         	String url = UriComponentsBuilder.fromHttpUrl("https://quickstats.nass.usda.gov/api/api_GET/")
         		    .queryParam("key", apiKey)
         		    .queryParam("commodity_desc", commodity)

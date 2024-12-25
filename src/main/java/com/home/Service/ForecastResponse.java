@@ -5,7 +5,10 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.home.Domain.Weather;
 
+import jakarta.persistence.Entity;
+
 @JsonIgnoreProperties(ignoreUnknown = true)
+ 
 public class ForecastResponse {
     private Properties properties;
 

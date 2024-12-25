@@ -5,7 +5,7 @@ public class WeatherResponse {
 	private String name;
     private Long dayForecast;
     private Double temperature;
-    private Double precipitationChance;  
+    private Long precipitationChance;  
     private String windSpeed;
     private String windDirection;
     private String shortForecast;
@@ -14,7 +14,7 @@ public class WeatherResponse {
     // Constructor
     public WeatherResponse() {}
 
-    public WeatherResponse(String name, Long dayForecast, Double temperature, Double precipitationChance, 
+    public WeatherResponse(String name, Long dayForecast, Double temperature, Long precipitationChance, 
                            String windSpeed, String windDirection, 
                            String shortForecast, String fullForecast) {
     	this.name = name;
@@ -52,11 +52,11 @@ public class WeatherResponse {
         this.temperature = temperature;
     }
 
-    public Double getPrecipitationChance() {
+    public Long getPrecipitationChance() {
         return precipitationChance;
     }
 
-    public void setPrecipitationChance(Double precipitationChance) {
+    public void setPrecipitationChance( Long precipitationChance) {
         this.precipitationChance = precipitationChance;
     }
 
@@ -90,6 +90,18 @@ public class WeatherResponse {
 
     public void setFullForecast(String fullForecast) {
         this.fullForecast = fullForecast;
+    }
+    
+    @Override
+    public String toString() {
+        return "Period{" +
+                "name='" + name + '\'' +
+                ", detailedForecast='" + fullForecast + '\'' +
+                ", temperature=" + temperature +
+                ", windSpeed='" + windSpeed + '\'' +
+                ", windDirection='" + windDirection + '\'' +
+                ", precipitation=" + (precipitationChance != null ? precipitationChance.doubleValue() : "null") +
+                '}';
     }
 }
 
