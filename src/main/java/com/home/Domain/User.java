@@ -2,97 +2,123 @@ package com.home.Domain;
 
 import java.util.Collection;
 import java.util.List;
-
-//import org.springframework.security.core.GrantedAuthority;
-//import org.springframework.security.core.userdetails.UserDetails;
-
-import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.Set;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import lombok.Data;
+
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import java.util.stream.Collectors;
 
 @Entity
+@Data
 @Table(name = "users")
-//public class User implements UserDetails {
-	public class User  {
+public class User implements UserDetails {
 
-	@Override
-	public String toString() {
-		return "User [userId=" + userId + ", firstName=" + firstName + ", lastName=" + lastName + ", username="
-				+ username + ", name=" + name + ", email=" + email + ", city=" + city + ", state=" + state
-				+ ", password=" + password + ", interest=" + interest + ", active=" + active + ", roles=" + roles
-				+ ", tokens=" + tokens + "]";
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    @Column(name = "userid")
+    private Long userId;
+
+    @Column(name = "first_name")
+    private String firstName;
+
+    @Column(name = "last_name")
+    private String lastName;
+
+    @Column(name = "username", unique = true, nullable = false)
+    private String username;
+
+    private String name;
+
+    @Column(unique = true, nullable = false)
+    private String email;
+
+    private String city;
+
+    private String state;
+
+    private String password;
+
+    private String interest;
+
+    private Boolean active;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @Enumerated(EnumType.STRING) 
+    private Set<Role> roles;
+
+    @OneToMany(mappedBy = "user")
+    private List<Token> tokens;
+
+    // Getters and setters for your fields...
+
+    // Required methods for UserDetails implementation
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        // Map roles to GrantedAuthority
+        return roles.stream()
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.name()))
+                .collect(Collectors.toSet());
+    }
+
+    @Override
+    public String getPassword() {
+        return this.password;
+    }
+
+    @Override
+    public String getUsername() {
+        return this.username;  
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;  
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;  
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;  
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return this.active;  
+    }
+
+    
+    public String getEmail() {
+		return email;
 	}
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.AUTO)
-	@JsonProperty
-	@Column(name = "userid")
-	Long userId;
-
-	@Column(name = "first_name")
-	@JsonProperty
-	String firstName;
-
-	@JsonProperty
-	@Column(name = "last_name")
-	String lastName;
-
-	@Column(name = "username")
-	private String username;
-
-	@JsonProperty
-	String name;
-
-	@JsonProperty
-	String email;
-
-	@JsonProperty
-	String city;
-
-	@JsonProperty
-	String state;
-
-	@JsonProperty
-	String password;
-
-	@JsonProperty
-	String interest;
-
-	@JsonProperty
-	Boolean active;
-
-	@Enumerated(value = EnumType.STRING)
-	Role roles;
-
-	@OneToMany(mappedBy = "user")
-	private List<Token> tokens;
-
-	public Long getUserId() {
-		return userId;
+	public void setEmail(String email) {
+		this.email = email;
 	}
 
-	public void setUserId(Long userId) {
-		this.userId = userId;
+	public String getInterest() {
+		return interest;
 	}
 
-	public String getFirstName() {
-		return firstName;
-	}
-
-	public String getName() {
-		return name;
-	}
-
-	public void setName(String name) {
-		this.name = name;
+	public void setInterest(String interest) {
+		this.interest = interest;
 	}
 
 	public Boolean getActive() {
@@ -103,12 +129,37 @@ import jakarta.persistence.Table;
 		this.active = active;
 	}
 
-	public Role getRoles() {
+	public Set<Role> getRoles() {
 		return roles;
 	}
 
-	public void setRole(Role roles) {
+	public void setRoles(Set<Role> roles) {
 		this.roles = roles;
+	}
+
+	public List<Token> getTokens() {
+		return tokens;
+	}
+
+	public void setTokens(List<Token> tokens) {
+		this.tokens = tokens;
+	}
+
+	public void setUsername(String username) {
+		this.username = username;
+	}
+
+	
+	public Long getUserId() {
+		return userId;
+	}
+
+	public void setUserId(Long userId) {
+		this.userId = userId;
+	}
+
+	public String getFirstName() {
+		return firstName;
 	}
 
 	public void setFirstName(String firstName) {
@@ -123,12 +174,12 @@ import jakarta.persistence.Table;
 		this.lastName = lastName;
 	}
 
-	public String getEmail() {
-		return email;
+	public String getName() {
+		return name;
 	}
 
-	public void setEmail(String email) {
-		this.email = email;
+	public void setName(String name) {
+		this.name = name;
 	}
 
 	public String getCity() {
@@ -147,81 +198,16 @@ import jakarta.persistence.Table;
 		this.state = state;
 	}
 
-	public List<Token> getTokens() {
-		return tokens;
-	}
-
-	public void setTokens(List<Token> tokens) {
-		this.tokens = tokens;
-	}
-
-	public void setUsername(String username) {
-		this.username = username;
-	}
-
-	public void setRoles(Role roles) {
-		this.roles = roles;
-	}
-
-	public String getPassword() {
-		return password;
-	}
-
 	public void setPassword(String password) {
 		this.password = password;
 	}
 
-	public String getInterest() {
-		return interest;
-	}
-
-	public void setInterest(String interest) {
-		this.interest = interest;
-	}
-
-//	@Override
-//	public Collection<? extends GrantedAuthority> getAuthorities() {
-//		// TODO Auto-generated method stub
-//		return null;
-//	}
-
-//	@Override
-//	public String getUsername() {
-//		// TODO Auto-generated method stub
-//		return null;
-//	}
-
-//	@Override
-//	public boolean isAccountNonExpired() {
-//		// TODO Auto-generated method stub
-//		return false;
-//	}
-
-	public String getUsername() {
-		return username;
-	}
-
-//	@Override
-//	public boolean isAccountNonLocked() {
-//		// TODO Auto-generated method stub
-//		return false;
-//	}
-
-//	@Override
-//	public boolean isCredentialsNonExpired() {
-//		// TODO Auto-generated method stub
-//		return false;
-//	}
-
-//	@Override
-//	public boolean isEnabled() {
-//		// TODO Auto-generated method stub
-//		return false;
-//	}
-
-	public Long getUserId1() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
+	@Override
+    public String toString() {
+        return "User [userId=" + userId + ", firstName=" + firstName + ", lastName=" + lastName + ", username="
+                + username + ", name=" + name + ", email=" + email + ", city=" + city + ", state=" + state
+                + ", password=" + password + ", interest=" + interest + ", active=" + active + ", roles=" + roles
+                + ", tokens=" + tokens + "]";
+    }
 }
+
