@@ -54,7 +54,7 @@ public class WeatherController {
                         weather.getWindSpeed(),
                         weather.getWindDirection(),
                         weather.getShortForecast(),
-                        weather.getFullForecast()
+                        weather.getShortForecast()
                     );
                 })
                 .collect(Collectors.toList());
