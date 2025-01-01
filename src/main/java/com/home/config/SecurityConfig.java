@@ -68,7 +68,7 @@ public class SecurityConfig  {
         http
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/login", "/register", "/fetch-weather/**").permitAll()
+                .requestMatchers("/login", "/register", "/fetch-weather/**", "/user", "cornyield","/beans","/posts").permitAll()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -81,7 +81,7 @@ public class SecurityConfig  {
         http
             .csrf().disable()
             .authorizeRequests()
-                .requestMatchers("/login", "/register", "/fetch-weather/**","/cornyields","/posts","/user", "/beans").permitAll() // Ensure /login is public
+                .requestMatchers("/login", "/register", "/fetch-weather/**", "/cornyields","/posts","/user", "/beans").permitAll() 
                 .anyRequest().authenticated()
             .and()
             .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
