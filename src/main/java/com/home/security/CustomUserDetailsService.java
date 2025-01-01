@@ -14,29 +14,21 @@ import com.home.Service.JwtTokenProvider;
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
 
-    @Autowired
-    private JwtTokenProvider jwtTokenProvider;
-	
-    private final UserRepository userRepository;
+	@Autowired
+	private UserRepository userRepository;
 
-    public CustomUserDetailsService(UserRepository userRepository) {
-        this.userRepository = userRepository;
-    }
+
     
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = userRepository.findByEmail(email)
+    	System.out.println("Fetching user by email: " + email);
+    	User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
-        return new CustomUserDetails(user); // Return your custom UserDetails implementation
+        return new CustomUserDetails(user);
     }
     
-    public String getUserFromToken(String token) {
-        if (jwtTokenProvider.validateToken(token)) {
-            return jwtTokenProvider.getUsernameFromToken(token);
-        }
-        return null;
-    }
+
 }
 
 

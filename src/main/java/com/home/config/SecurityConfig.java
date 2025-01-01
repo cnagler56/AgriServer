@@ -13,12 +13,14 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
  
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.home.Domain.User;
 import com.home.Repository.UserRepository;
 import com.home.Service.JwtTokenProvider;
 import com.home.security.CustomUserDetailsService;
@@ -30,10 +32,9 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 @Configuration
+@EnableWebSecurity
 public class SecurityConfig  {
 	
-	@Autowired
-	private JwtTokenProvider jwtTokenProvider;
 
     private final CustomUserDetailsService customUserDetailsService;
     
@@ -49,25 +50,49 @@ public class SecurityConfig  {
         return configuration.getAuthenticationManager();
     }
 
+//    @Bean
+//    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+//        http
+//            .csrf(csrf -> csrf.disable())
+//            .authorizeHttpRequests(auth -> auth
+//                .requestMatchers("/login", "/register", "/fetch-weather/**","/beans","/cornyields","/user","/posts").permitAll()
+//                .anyRequest().authenticated()
+//            )
+//            .formLogin(Customizer.withDefaults());
+//
+//        return http.build();
+//    }
+    
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationService jwtAuthenticationService) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/login", "/register", "/fetch-weather/**","/beans","/cornyields","/user","/posts").permitAll()
+                .requestMatchers("/login", "/register", "/fetch-weather/**").permitAll()
                 .anyRequest().authenticated()
             )
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
-//            .addFilterBefore(new JwtAuthenticationFilter(jwtAuthenticationService), UsernamePasswordAuthenticationFilter.class);
-
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .formLogin().disable(); // Disable the default login form
         return http.build();
     }
+
+    
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+            .csrf().disable()
+            .authorizeRequests()
+                .requestMatchers("/login", "/register", "/fetch-weather/**","/cornyields","/posts","/user", "/beans").permitAll() // Ensure /login is public
+                .anyRequest().authenticated()
+            .and()
+            .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+    }
+
 
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
         authProvider.setUserDetailsService(customUserDetailsService);
-        authProvider.setPasswordEncoder(passwordEncoder()); // Use NoOpPasswordEncoder here
+        authProvider.setPasswordEncoder(passwordEncoder());
         return authProvider;
     }
 
@@ -75,19 +100,9 @@ public class SecurityConfig  {
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
-    
-//    @Bean
-//    public CorsConfigurationSource corsConfigurationSource() {
-//        CorsConfiguration configuration = new CorsConfiguration();
-//        configuration.addAllowedOrigin("*"); // Adjust to your needs
-//        configuration.addAllowedMethod("*");
-//        configuration.addAllowedHeader("*");
-//        configuration.setAllowCredentials(true);
-//        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-//        source.registerCorsConfiguration("/**", configuration);
-//        return source;
-//    }
+   
 
 }
 
 
+ 

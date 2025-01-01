@@ -47,6 +47,9 @@ public class CustomUserDetails implements UserDetails {
     public String getPassword() {
         return user.getPassword();  
     }
+    public String getEmail() {
+    	return user.getEmail();
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

@@ -40,6 +40,9 @@ import com.home.Service.PostService;
 import com.home.Service.UserService;
 import com.home.security.CustomUserDetails;
 import com.home.security.JwtAuthenticationResponse;
+import com.home.security.SessionAuthenticationResponse;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -104,20 +107,25 @@ public class IndexController {
 }
 
 	@PostMapping("/login")
-	public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
-	      
+	public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest,HttpServletRequest request) {
+		System.out.println("Username: " + loginRequest.getEmail());
+		System.out.println(loginRequest.getPassword());
+	    String email = "mike@gmail.com";
+		System.out.println("Authenticating user: " + loginRequest.getEmail());
 	    Authentication authentication = authenticationManager.authenticate(
-	        new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword())
-	    );
+	            new UsernamePasswordAuthenticationToken(email, loginRequest.getPassword())
+	        );
+	    SecurityContextHolder.getContext().setAuthentication(authentication);
+	    request.getSession(true);
 	    
-	    // Generate JWT token
-	    String token = jwtTokenProvider.createToken(authentication.getName());
+	    CustomUserDetails userDetails= (CustomUserDetails) authentication.getPrincipal();
 	    
-	     
-	    return ResponseEntity.ok(new JwtAuthenticationResponse(token));
+
+	    
+	    return ResponseEntity.ok(new SessionAuthenticationResponse(
+	    		userDetails.getUsername(), userDetails.getUser().getFirstName()
+	    		));
 	}
-
-
     @PostMapping("/register")
     public ResponseEntity<String> registerUser(@RequestBody RegistrationRequest request) {
      
