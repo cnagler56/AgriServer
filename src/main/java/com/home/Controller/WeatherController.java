@@ -34,6 +34,7 @@ public class WeatherController {
     
 
     @GetMapping("/fetch-weather")
+    @CrossOrigin(origins = "http://localhost:3000")
     public List<WeatherResponse> fetchWeather(
             @RequestParam String gridID,
             @RequestParam String gridX,

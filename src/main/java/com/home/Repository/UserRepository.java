@@ -5,14 +5,14 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import com.home.Domain.User;
+import com.home.Domain.MyUsers;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, Long>{
+public interface UserRepository extends JpaRepository<MyUsers, Long>{
 	 
-	Optional<User> findByUsername(String username);
-	Optional<User> findByUsernameAndPassword(String username, String password);
-	Optional<User> findByEmailAndPassword(String email, String password);
-	Optional<User> findByEmail(String email);
+	Optional<MyUsers> findByUsername(String username);
+	Optional<MyUsers> findByUsernameAndPassword(String username, String password);
+	Optional<MyUsers> findByEmailAndPassword(String email, String password);
+	Optional<MyUsers> findByEmail(String email);
  
 }

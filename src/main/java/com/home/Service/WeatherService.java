@@ -60,7 +60,6 @@ public class WeatherService {
                 })
                 .collect(Collectors.toList());
 
-            // Return the list of Weather entities
             return forecasts;
         }
 

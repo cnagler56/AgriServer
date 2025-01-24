@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.home.Domain.LoginDTO;
-import com.home.Domain.User;
+import com.home.Domain.MyUsers;
 import com.home.Repository.UserRepository;
 
 @Service
@@ -25,13 +25,13 @@ public class UserService {
 	}
 	
 	
-    public List<User> getList() {
+    public List<MyUsers> getList() {
         return this.userRepository.findAll();
     }
     
     
-    public void saveUser(User user) {
-    	this.userRepository.save(user);
+    public void saveUser(MyUsers myUsers) {
+    	this.userRepository.save(myUsers);
     	}
 
 }

@@ -30,12 +30,11 @@ import com.home.Domain.CornYields;
 import com.home.Domain.LoginDTO;
 import com.home.Domain.Post;
 import com.home.Domain.Role;
-import com.home.Domain.User;
+import com.home.Domain.MyUsers;
 import com.home.Domain.DTO.LoginRequest;
 import com.home.Domain.DTO.RegistrationRequest;
 import com.home.Repository.UserRepository;
 import com.home.Service.GrainService;
-import com.home.Service.JwtTokenProvider;
 import com.home.Service.PostService;
 import com.home.Service.UserService;
 import com.home.security.CustomUserDetails;
@@ -51,17 +50,15 @@ public class IndexController {
 	private final UserService userService;
 	private final PostService postService;
 	private final GrainService grainService;
-	private final JwtTokenProvider jwtTokenProvider;
 	private final UserRepository userRepository;
 	private final AuthenticationManager authenticationManager;
 
 	
 	public IndexController(UserService userService, PostService postService, GrainService grainService,
-			JwtTokenProvider jwtTokenProvider, UserRepository userRepository, AuthenticationManager authenticationManager) {
+			 UserRepository userRepository, AuthenticationManager authenticationManager) {
 		this.userService = userService;
 		this.postService = postService;
 		this.grainService = grainService;
-		this.jwtTokenProvider = jwtTokenProvider;
 		this.userRepository = userRepository;
 		this.authenticationManager = authenticationManager;
 	 
@@ -72,7 +69,7 @@ public class IndexController {
 
 	
 	@GetMapping("/user")
-	   public Iterable<User> users() {
+	   public Iterable<MyUsers> myUsers() {
         return this.userService.getList();
     }
 
@@ -106,26 +103,60 @@ public class IndexController {
 		return this.grainService.getCorn();
 }
 
+//	@PostMapping("/login")
+//	public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest,HttpServletRequest request) {    
+//		MyUsers myUsers = new MyUsers();
+//		myUsers.setName(loginRequest.getEmail());
+//	    System.out.println(myUsers.getName());
+//	    return ResponseEntity.ok(
+//	    		myUsers
+//	    		);
+//	}
+
+//	 @PostMapping("/login")
+//	    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
+//	        // Log received login request details
+//		    SecurityContextHolder.clearContext();  // Clears any existing authentication context
+//		    request.getSession().invalidate(); 
+//		 System.out.println("Custom /login endpoint hit!");
+//	        System.out.println("Email: " + loginRequest.getEmail());
+//	        System.out.println("Password: " + loginRequest.getPassword());
+//
+//	        // Authenticate the user
+//	        UsernamePasswordAuthenticationToken authToken =
+//	                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword());
+//
+//	        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+//	        if (authentication.isAuthenticated()) {
+//	            System.out.println("Authentication successful for: " + authentication.getName());
+//	            return ResponseEntity.ok("Login successful!");
+//	        }
+//
+//	        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Login failed");
+//	    }
+	
 	@PostMapping("/login")
-	public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest,HttpServletRequest request) {
-		System.out.println("Username: " + loginRequest.getEmail());
-		System.out.println(loginRequest.getPassword());
-	    String email = "mike@gmail.com";
-		System.out.println("Authenticating user: " + loginRequest.getEmail());
+	public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest, HttpServletRequest request) {
+	    System.out.println("Username: " + loginRequest.getEmail());
+	    System.out.println("Password: " + loginRequest.getPassword());
+
+	    // Use email from request
 	    Authentication authentication = authenticationManager.authenticate(
-	            new UsernamePasswordAuthenticationToken(email, loginRequest.getPassword())
-	        );
+	        new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword())
+	    );
+
 	    SecurityContextHolder.getContext().setAuthentication(authentication);
 	    request.getSession(true);
-	    
-	    CustomUserDetails userDetails= (CustomUserDetails) authentication.getPrincipal();
-	    
 
-	    
+	    // Assuming CustomUserDetails is your principal class
+	    CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+
 	    return ResponseEntity.ok(new SessionAuthenticationResponse(
-	    		userDetails.getUsername(), userDetails.getUser().getFirstName()
-	    		));
+	        userDetails.getUsername(),
+	        userDetails.getUser().getFirstName()
+	    ));
 	}
+
     @PostMapping("/register")
     public ResponseEntity<String> registerUser(@RequestBody RegistrationRequest request) {
      
@@ -139,7 +170,7 @@ public class IndexController {
         }
 
       
-        User newUser = new User();
+        MyUsers newUser = new MyUsers();
         newUser.setFirstName(request.getFirstName());
         newUser.setLastName(request.getLastName());
         newUser.setUsername(request.getUsername());
@@ -148,8 +179,8 @@ public class IndexController {
         newUser.setState(request.getState());
         newUser.setPassword(passwordEncoder.encode(request.getPassword())); // Encode password
         newUser.setInterest(request.getInterest());
-        newUser.setActive(true); // Mark user as active by default
-        newUser.setRoles(Set.of(Role.USER)); // Assign default role
+        newUser.setActive(true); 
+        newUser.setRoles(Set.of(Role.USER)); 
 
         userRepository.save(newUser);
 

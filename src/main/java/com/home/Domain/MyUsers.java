@@ -15,7 +15,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
-import lombok.Data;
+
 
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -23,9 +23,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.util.stream.Collectors;
 
 @Entity
-@Data
 @Table(name = "users")
-public class User implements UserDetails {
+public class MyUsers implements UserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
@@ -55,13 +54,12 @@ public class User implements UserDetails {
     private String interest;
 
     private Boolean active;
+    
 
     @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(EnumType.STRING) 
     private Set<Role> roles;
 
-    @OneToMany(mappedBy = "user")
-    private List<Token> tokens;
 
     // Getters and setters for your fields...
 
@@ -137,13 +135,7 @@ public class User implements UserDetails {
 		this.roles = roles;
 	}
 
-	public List<Token> getTokens() {
-		return tokens;
-	}
 
-	public void setTokens(List<Token> tokens) {
-		this.tokens = tokens;
-	}
 
 	public void setUsername(String username) {
 		this.username = username;
@@ -202,13 +194,13 @@ public class User implements UserDetails {
 		this.password = password;
 	}
 
-	@Override
-    public String toString() {
-        return "User [userId=" + userId + ", firstName=" + firstName + ", lastName=" + lastName + ", username="
-                + username + ", name=" + name + ", email=" + email + ", city=" + city + ", state=" + state
-                + ", password=" + password + ", interest=" + interest + ", active=" + active + ", roles=" + roles
-                + ", tokens=" + tokens + "]";
-    }
+//	@Override
+//    public String toString() {
+//        return "User [userId=" + userId + ", firstName=" + firstName + ", lastName=" + lastName + ", username="
+//                + username + ", name=" + name + ", email=" + email + ", city=" + city + ", state=" + state
+//                + ", password=" + password + ", interest=" + interest + ", active=" + active + ", roles=" + roles
+//                + ", role="]";
+//    }
 
 
 }

@@ -26,7 +26,7 @@ public class Token {
 
     @ManyToOne
     @JoinColumn(name = "user_id")
-    private User user;
+    private MyUsers myUsers;
 
     public Integer getId() {
         return id;
@@ -52,11 +52,11 @@ public class Token {
         this.loggedOut = loggedOut;
     }
 
-    public User getUser() {
-        return user;
+    public MyUsers getUser() {
+        return myUsers;
     }
 
-    public void setUser(User user) {
-        this.user = user;
+    public void setUser(MyUsers myUsers) {
+        this.myUsers = myUsers;
     }
 }

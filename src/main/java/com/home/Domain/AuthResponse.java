@@ -2,11 +2,11 @@ package com.home.Domain;
 
 public class AuthResponse {
     private String token;
-    private User user;
+    private MyUsers myUsers;
 
-    public AuthResponse(String token, User user) {
+    public AuthResponse(String token, MyUsers myUsers) {
         this.token = token;
-        this.user = user;
+        this.myUsers = myUsers;
     }
 
 	public String getToken() {
@@ -17,12 +17,12 @@ public class AuthResponse {
 		this.token = token;
 	}
 
-	public User getUser() {
-		return user;
+	public MyUsers getUser() {
+		return myUsers;
 	}
 
-	public void setUser(User user) {
-		this.user = user;
+	public void setUser(MyUsers myUsers) {
+		this.myUsers = myUsers;
 	}
 
 

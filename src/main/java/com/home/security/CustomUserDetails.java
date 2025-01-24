@@ -5,7 +5,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import com.home.Domain.Role;
-import com.home.Domain.User;
+import com.home.Domain.MyUsers;
 
 import ch.qos.logback.core.subst.Token;
 import jakarta.persistence.Column;
@@ -32,29 +32,29 @@ import java.util.stream.Collectors;
 
 public class CustomUserDetails implements UserDetails {
 
-    private final User user;  
+    private final MyUsers myUsers;  
 
-    public CustomUserDetails(User user) {
-        this.user = user;
+    public CustomUserDetails(MyUsers myUsers) {
+        this.myUsers = myUsers;
     }
 
     @Override
     public String getUsername() {
-        return user.getEmail();  
+        return myUsers.getEmail();  
     }
 
     @Override
     public String getPassword() {
-        return user.getPassword();  
+        return myUsers.getPassword();  
     }
     public String getEmail() {
-    	return user.getEmail();
+    	return myUsers.getEmail();
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         // Convert user roles to GrantedAuthority
-        return user.getRoles().stream()
+        return myUsers.getRoles().stream()
                 .map(role -> new SimpleGrantedAuthority("ROLE_" + role.name()))
                 .toList();
     }
@@ -76,11 +76,11 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return user.getActive(); 
+        return myUsers.getActive(); 
     }
 
-    public User getUser() {
-        return this.user;  
+    public MyUsers getUser() {
+        return this.myUsers;  
     }
 }
 
