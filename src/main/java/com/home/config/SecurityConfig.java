@@ -39,9 +39,18 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+<<<<<<< HEAD
         return http
             .csrf(AbstractHttpConfigurer::disable)
             .cors(Customizer.withDefaults())
+=======
+        http
+            .csrf(csrf -> csrf.disable())
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/login", "/register", "/fetch-weather/**", "/user", "cornyield","/beans","/posts").permitAll()
+                .anyRequest().authenticated()
+            )
+>>>>>>> 47025116fc44b0d5e41c6259eaf0eb20efc9837d
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> {
                 auth.requestMatchers("/login", "/register", "/fetch-weather/**", "/beans", "/cornyields", "/user", "/posts").permitAll();
