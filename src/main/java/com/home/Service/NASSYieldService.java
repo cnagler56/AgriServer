@@ -80,10 +80,8 @@ public class NASSYieldService {
 //            String[] statistics = {"YIELD", "ACRES"};
 //
 //            for (String commodity : commodities) {
-//                // Fetch YIELD data
 //                ApiResponse yieldResponse = fetchDataWithParameters(commodity, "2024",  "NOV", "YIELD");
 //
-//                // Fetch ACRES data
 //                ApiResponse acresResponse = fetchDataWithParameters(commodity, "2024", "NOV", "ACRES");
 //
 //                if (yieldResponse != null && acresResponse != null) {
@@ -154,16 +152,16 @@ public class NASSYieldService {
         private List<NASSYieldData> consolidate(ApiResponse yieldResponse, ApiResponse acresResponse) {
             Map<String, String> acresMap = new HashMap<>();
 
-            // Map state to acres from acresResponse
+ 
             if (acresResponse != null && acresResponse.getData() != null) {
                 for (ApiResponse.ApiItem acresItem : acresResponse.getData()) {
-                    acresMap.put(acresItem.getState(), acresItem.getYield()); // Assuming "getYield" for acres value
+                    acresMap.put(acresItem.getState(), acresItem.getYield()); 
                 }
             }
 
             List<NASSYieldData> consolidatedData = new ArrayList<>();
 
-            // Consolidate yield data with acres data
+ 
             if (yieldResponse != null && yieldResponse.getData() != null) {
                 for (ApiResponse.ApiItem yieldItem : yieldResponse.getData()) {
                     NASSYieldData entity = new NASSYieldData();

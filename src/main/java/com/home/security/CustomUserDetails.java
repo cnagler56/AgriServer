@@ -53,25 +53,24 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // Convert user roles to GrantedAuthority
         return myUsers.getRoles().stream()
-                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.name()))
-                .toList();
+                .map(role -> new SimpleGrantedAuthority("Role_" + role.name()))
+                .collect(Collectors.toList()); 
     }
 
     @Override
     public boolean isAccountNonExpired() {
-        return true; // Customize if you manage expiration
+        return true;  
     }
 
     @Override
     public boolean isAccountNonLocked() {
-        return true; // Customize if you manage locked accounts
+        return true;  
     }
 
     @Override
     public boolean isCredentialsNonExpired() {
-        return true; // Customize if credentials have expiration
+        return true; 
     }
 
     @Override

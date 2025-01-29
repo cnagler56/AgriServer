@@ -60,15 +60,10 @@ public class MyUsers implements UserDetails {
     @Enumerated(EnumType.STRING) 
     private Set<Role> roles;
 
-
-    // Getters and setters for your fields...
-
-    // Required methods for UserDetails implementation
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // Map roles to GrantedAuthority
         return roles.stream()
-                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.name()))
+                .map(role -> new SimpleGrantedAuthority(role.name()))
                 .collect(Collectors.toSet());
     }
 

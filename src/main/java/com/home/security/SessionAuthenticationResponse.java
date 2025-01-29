@@ -2,12 +2,19 @@ package com.home.security;
 
 public class SessionAuthenticationResponse {
     private String email;
-    private String name;
     private String firstName;
+    private String lastName;
+    private String city;
+    private String state;
+    private String interest;
 
-    public SessionAuthenticationResponse(String email, String name) {
+    public SessionAuthenticationResponse(String email, String firstName, String lastName, String city, String state, String interest) {
         this.email = email;
-        this.name = name;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.city = city;
+        this.state = state;
+        this.interest = interest;
     }
 
     public String getFirstName() {
@@ -27,11 +34,35 @@ public class SessionAuthenticationResponse {
         this.email = email;
     }
 
-    public String getName() {
-        return name;
-    }
+	public String getLastName() {
+		return lastName;
+	}
 
-    public void setName(String name) {
-        this.name = name;
-    }
+	public void setLastName(String lastName) {
+		this.lastName = lastName;
+	}
+
+	public String getCity() {
+		return city;
+	}
+
+	public void setCity(String city) {
+		this.city = city;
+	}
+
+	public String getState() {
+		return state;
+	}
+
+	public void setState(String state) {
+		this.state = state;
+	}
+
+	public String getInterest() {
+		return interest;
+	}
+
+	public void setInterest(String interest) {
+		this.interest = interest;
+	}
 }
