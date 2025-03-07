@@ -59,8 +59,10 @@ public class NASSYieldService {
         		    .queryParam("key", apiKey)
         		    .queryParam("commodity_desc", commodity)
         		    .queryParam("year", year)
-//        		    .queryParam("reference_period_desc", month)
+        		    .queryParam("reference_period_desc", "YEAR")
         		    .queryParam("statisticcat_desc", statistic)
+        		    .queryParam("agg_level_desc", "STATE")
+        		    .queryParam("util_practice_desc", "GRAIN")
         		    .toUriString();
         	
             Map<String, String> params = new HashMap<>();
@@ -68,6 +70,9 @@ public class NASSYieldService {
             params.put("year", String.valueOf(year));
             params.put("month", month);
             params.put("statistic", statistic);
+            params.put("agg_level_desc", "STATE");
+            params.put("util_practice_desc", "GRAIN");
+            System.out.println("URL: " + url);
 
             return restTemplate.getForObject(url, ApiResponse.class, params);
         }
@@ -103,7 +108,7 @@ public class NASSYieldService {
                         NASSYieldData entity = new NASSYieldData();
                         entity.setCommodity(yieldItem.getCommodity());
                         entity.setState(yieldItem.getState());
-                        entity.setYield(yieldItem.getYield());
+                        entity.setYieldValue(yieldItem.getYield());
                         entity.setLoadTime(yieldItem.getLoad_time());
 
                         yieldDataRepository.save(entity); 
@@ -113,8 +118,8 @@ public class NASSYieldService {
         }
         }
         public List<NASSYieldData> fetchNASSYieldData (String grain, String month, String year){
-            ApiResponse yieldResponse = fetchDataWithParameters(grain, month, year, "YIELD");
             ApiResponse acresResponse = fetchDataWithParameters(grain, month, year, "YIELD");
+            ApiResponse yieldResponse = fetchDataWithParameters(grain, month, year, "YIELD");
              
                 return consolidate(yieldResponse, acresResponse);
         }
@@ -140,7 +145,7 @@ public class NASSYieldService {
                     NASSYieldData entity = new NASSYieldData();
                     entity.setCommodity(yieldItem.getCommodity());
                     entity.setState(yieldItem.getState());
-                    entity.setYield(yieldItem.getYield());
+                    entity.setYieldValue(yieldItem.getYield());
                     entity.setAcresValue(acresMap.getOrDefault(yieldItem.getState(), "N/A")); // Match state for acres
                     entity.setLoadTime(yieldItem.getLoad_time());
 
@@ -167,8 +172,8 @@ public class NASSYieldService {
                     NASSYieldData entity = new NASSYieldData();
                     entity.setCommodity(yieldItem.getCommodity());
                     entity.setState(yieldItem.getState());
-                    entity.setYield(yieldItem.getYield());
-                    entity.setAcresValue(acresMap.getOrDefault(yieldItem.getState(), "N/A")); // Match state for acres
+//                    entity.setYield(yieldItem.getYield());
+                    entity.setYieldValue(acresMap.getOrDefault(yieldItem.getState(), "N/A"));
                     entity.setLoadTime(yieldItem.getLoad_time());
 
                     consolidatedData.add(entity); 

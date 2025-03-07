@@ -1,8 +1,8 @@
 package com.home.Domain;
 
 import jakarta.persistence.*;
+import lombok.Data;
 
- 
 import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 @Entity
 @Table(name="cattle")
+@Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CattleData {
 
@@ -32,5 +33,23 @@ public class CattleData {
     @JsonProperty("Value")
     @Column(name="inventory", nullable = true)
     private String inventory;
+
+
+    public String getValue() {
+        return inventory;
+    }
+    public String getStateName() {
+    	return stateName;
+    }
     
+    @Override
+    public String toString() {
+        return "CattleData{" +
+                "id=" + id +
+                ", animal='" + animal + '\'' +
+                ", loadTime=" + loadTime +
+                ", stateName='" + stateName + '\'' +
+                ", inventory='" + inventory + '\'' +
+                '}';
+    }
 }

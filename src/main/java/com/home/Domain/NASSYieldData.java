@@ -24,7 +24,7 @@ public class NASSYieldData {
     private String state;
     
     @JsonProperty("Value")
-    private String yield;  
+    private String yieldValue;  
     
     
     private String acresValue;  
@@ -39,8 +39,8 @@ public class NASSYieldData {
     public void setCommodity(String commodity) { this.commodity = commodity; }
     public String getState() { return state; }
     public void setState(String state) { this.state = state; }
-    public String getYield() { return yield; }
-    public void setYield(String yieldValue) { this.yield = yield; }
+    public String getYieldValue() { return yieldValue; }
+    public void setYieldValue(String yieldValue) { this.yieldValue = yieldValue; }
     public String getAcresValue() { return acresValue; }
     public void setAcresValue(String acresValue) { this.acresValue = acresValue; }
     public String getLoadTime() { return loadTime; }

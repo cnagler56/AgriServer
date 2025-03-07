@@ -1,6 +1,10 @@
 package com.home.Service;
 
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
@@ -72,7 +76,7 @@ public class AnimalService {
                 .queryParam("key", apiKey)             
                 .queryParam("sector", "ANIMALS+%26+PRODUCTS")   
                 .queryParam("group", "CATTLE")
-                .queryParam("commodity_desc", "HOGS")
+                .queryParam("commodity_desc", "CATTLE")
                 .queryParam("statisticcat_desc", "INVENTORY")
                 .queryParam("month", month)
                 .queryParam("year", year)          
@@ -84,18 +88,33 @@ public class AnimalService {
             null,
             new ParameterizedTypeReference<CattleResponse>() {}
         );
-        System.out.println(response.getBody().getData());
+
         if (response.getBody() != null) {
-            List<CattleData> data = response.getBody().getData();
-            data.forEach(d -> {
+        	List<CattleData> data = response.getBody().getData();
+        	
+        	Set<String> seenStates = new HashSet<>();
+        	
+            List<CattleData> filteredData = data.stream()
+                    .filter(d -> d.getValue() != null && !d.getValue().isEmpty())
+//                    .filter(d -> (!d.getStateName().contains(",")))
+//                    .filter(d -> (d.getValue().contains(",")))
+//                    .filter(d-> seenStates.add(d.getStateName()))
+                    .sorted(Comparator.comparingInt(d -> -parseValue(d.getValue()))) 
+                    .collect(Collectors.toList());
 
-            });
+                return filteredData;
 
-
-            return data;
         }
 
         throw new RuntimeException("Failed to fetch data from USDA API");
+    }
+    
+    private int parseValue(String inventory) {
+        try {
+            return Integer.parseInt(inventory.replaceAll(",", ""));
+        } catch (NumberFormatException e) {
+            return 0; 
+        }
     }
 }
 	

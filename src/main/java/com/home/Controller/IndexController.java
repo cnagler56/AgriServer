@@ -12,6 +12,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -42,6 +43,7 @@ import com.home.Domain.MyUsers;
 import com.home.Domain.Post;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
@@ -113,21 +115,28 @@ public class IndexController {
 	        new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword())
 	    );
 
-	    SecurityContextHolder.getContext().setAuthentication(authentication);
-	    request.getSession(true);
+	    SecurityContext securityContext = SecurityContextHolder.getContext();
+	    securityContext.setAuthentication(authentication);
+
+	    // 🔥 Ensure session is created and stored
+	    HttpSession session = request.getSession(true);
+	    session.setAttribute("SPRING_SECURITY_CONTEXT", securityContext);
 
 	    CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
 
+	    // 🔥 Print session ID to confirm it is being created
+	    System.out.println("Session ID: " + session.getId());
+
 	    return ResponseEntity.ok(new SessionAuthenticationResponse(
-    		userDetails.getUser().getEmail(),	
+	        userDetails.getUser().getEmail(),    
 	        userDetails.getUser().getFirstName(),
-	        userDetails.getUser().getLastName(),	        
+	        userDetails.getUser().getLastName(),        
 	        userDetails.getUser().getCity(),
 	        userDetails.getUser().getState(),
 	        userDetails.getUser().getInterest()
-	        
 	    ));
 	}
+
 
     @PostMapping("/register")
     public ResponseEntity<String> registerUser(@RequestBody RegistrationRequest request) {
@@ -160,14 +169,17 @@ public class IndexController {
     }
     
     @GetMapping("/me")
-    public ResponseEntity<?> getAuthenticatedUser() {
+    public ResponseEntity<?> getAuthenticatedUser(HttpServletRequest request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.isAuthenticated()) {
-            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
-            return ResponseEntity.ok(userDetails.getUser());
+        System.out.println("Authentication" + authentication);
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Not Authenticated"); // ⬅️ 401 if not logged in
         }
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();  // Session expired or not authenticated
+
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        return ResponseEntity.ok(userDetails.getUser()); // ⬅️ 200 if logged in
     }
+
 
 	
 	   @PostMapping("/cornGuess")
@@ -181,16 +193,18 @@ public class IndexController {
 	   }
 	
 	   @PostMapping("/posts/addpost")
-	   public void addPost(@RequestBody Post post, HttpServletRequest request) {
-	       // Retrieve the session object to check if the user is logged in
-	       if (request.getSession(false) != null && request.getSession(false).getAttribute("user") != null) {
-	           // User is authenticated, proceed to add the post
-	           this.postService.addPost(post);
-	       } else {
-	           // If the session is null or the user is not logged in, return an error
-	           throw new ResponseStatusException(null, "User is not authenticated");
+	   public void addPost(@RequestBody Post post) {
+	       // Retrieve the authentication object
+	       Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+	       if (authentication == null || !authentication.isAuthenticated() || authentication.getPrincipal().equals("anonymousUser")) {
+	           throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is not authenticated");
 	       }
+
+	       // If authentication is valid, proceed to add the post
+	       this.postService.addPost(post);
 	   }
+
 
 
 	

@@ -46,24 +46,28 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-            .csrf(AbstractHttpConfigurer::disable)
+            .csrf(AbstractHttpConfigurer::disable) // ⬅️ Disable CSRF (needed for session-based APIs)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
-                    "/login", "/register", "/logout", // 👈 
+                    "/login", "/register", "/logout","/me"
+                ).permitAll() // ⬅️ These can be accessed without authentication
+                
+                .requestMatchers(
                     "/addpost", "/cornyields", "/cornguess",
                     "/api/hogs**", "/api/nass-yield-data", "/api/cattle**", "/cornestimates",
                     "/fetch-weather/**", "/user", "/cornyield", "/beans", "/posts"
                 ).permitAll()
+                
                 .anyRequest().authenticated()
             )
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.ALWAYS))
             .logout(logout -> logout
-                .logoutUrl("/logout")  // Defines the logout URL
-                .invalidateHttpSession(true)  // Clears the session
-                .deleteCookies("JSESSIONID")  // Removes the JSESSIONID cookie
+                .logoutUrl("/logout")
+                .invalidateHttpSession(true)
+                .deleteCookies("JSESSIONID")
                 .logoutSuccessHandler((request, response, authentication) -> {
-                    response.setStatus(HttpServletResponse.SC_OK); // 👈 Prevents redirection
+                    response.setStatus(HttpServletResponse.SC_OK);
                 })
                 .permitAll()
             )
