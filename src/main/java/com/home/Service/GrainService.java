@@ -62,5 +62,9 @@ public class GrainService {
     public List<CornGuess> getCornGuess() {
     	return this.cornrepo.findAll();
     }
-    
+
+    public List<BeanGuess> getBeanGuesses() {
+    	return this.repoBeans.findAll();
+    }
+
 }

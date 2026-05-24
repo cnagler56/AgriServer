@@ -79,6 +79,11 @@ public class IndexController {
 		return this.grainService.getCornGuess();
 	}
 
+	@GetMapping("/beanestimates")
+	public List <BeanGuess> beanGuesses() {
+		return this.grainService.getBeanGuesses();
+	}
+
     
 	@GetMapping("/beans")
 	   public Iterable<Beans> beans() {
