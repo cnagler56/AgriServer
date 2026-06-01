@@ -19,16 +19,23 @@ public class NASSYieldData {
     
     @JsonProperty("commodity_desc")
     private String commodity;
-    
+
+    /** e.g. "CORN, GRAIN - YIELD, MEASURED IN BU / ACRE" — identifies the specific report variant. */
+    @JsonProperty("short_desc")
+    private String shortDesc;
+
     @JsonProperty("state_name")
     private String state;
-    
+
+    @JsonProperty("year")
+    private Integer year;
+
     @JsonProperty("Value")
-    private String yield;  
-    
-    
-    private String acresValue;  
-    
+    private String yield;
+
+
+    private String acresValue;
+
     @JsonProperty("load_time")
     private String loadTime;
 
@@ -37,10 +44,14 @@ public class NASSYieldData {
     public void setId(Long id) { this.id = id; }
     public String getCommodity() { return commodity; }
     public void setCommodity(String commodity) { this.commodity = commodity; }
+    public String getShortDesc() { return shortDesc; }
+    public void setShortDesc(String shortDesc) { this.shortDesc = shortDesc; }
     public String getState() { return state; }
     public void setState(String state) { this.state = state; }
+    public Integer getYear() { return year; }
+    public void setYear(Integer year) { this.year = year; }
     public String getYield() { return yield; }
-    public void setYield(String yieldValue) { this.yield = yield; }
+    public void setYield(String yieldValue) { this.yield = yieldValue; }
     public String getAcresValue() { return acresValue; }
     public void setAcresValue(String acresValue) { this.acresValue = acresValue; }
     public String getLoadTime() { return loadTime; }

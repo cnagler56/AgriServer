@@ -61,4 +61,32 @@ public class UserService {
 //        this.tokenMap.put(token, user.getUserId());
         return user;
     }
+
+    /**
+     * Create a new user from the sign-up form.
+     * Throws 409 CONFLICT if the email is already on file.
+     */
+    public User register(User incoming) {
+        if (incoming.getEmail() == null || incoming.getEmail().isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email is required");
+        if (incoming.getPassword() == null || incoming.getPassword().isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password is required");
+
+        if (this.userRepository.findByEmail(incoming.getEmail()).isPresent())
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with that email already exists");
+
+        // Fall back username to the email if none was given
+        if (incoming.getUsername() == null || incoming.getUsername().isBlank())
+            incoming.setUsername(incoming.getEmail());
+
+        // Combine first/last into the display "name" if the client didn't send one
+        if (incoming.getName() == null || incoming.getName().isBlank()) {
+            String combined = ((incoming.getFirstName() == null ? "" : incoming.getFirstName()) + " "
+                              + (incoming.getLastName()  == null ? "" : incoming.getLastName())).trim();
+            if (!combined.isEmpty()) incoming.setName(combined);
+        }
+
+        incoming.setActive(Boolean.TRUE);
+        return this.userRepository.save(incoming);
+    }
 }

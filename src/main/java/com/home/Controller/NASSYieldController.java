@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.home.Domain.CropProgressData;
 import com.home.Domain.NASSYieldData;
 import com.home.Service.NASSYieldService;
 
@@ -27,11 +28,26 @@ public class NASSYieldController {
     
     @GetMapping("/nass-yield-data")
     public ResponseEntity<List<NASSYieldData>> fetchNassYield(
-    		@RequestParam String grain, 
-    		@RequestParam String month, 
+    		@RequestParam String grain,
+    		@RequestParam String month,
     		@RequestParam String year) {
         List<NASSYieldData> data = yieldService.fetchNASSYieldData(grain, month, year);
         return ResponseEntity.ok(data);
+    }
+
+    @GetMapping("/yield-history")
+    public ResponseEntity<List<NASSYieldData>> yieldHistory(
+            @RequestParam String grain,
+            @RequestParam(required = false, defaultValue = "5") int years) {
+        return ResponseEntity.ok(yieldService.fetchYieldHistory(grain, years));
+    }
+
+    @GetMapping("/crop-progress")
+    public ResponseEntity<List<CropProgressData>> cropProgress(
+            @RequestParam String grain,
+            @RequestParam(required = false) Integer year) {
+        int y = year != null ? year : java.time.Year.now().getValue();
+        return ResponseEntity.ok(yieldService.fetchCropProgress(grain, y));
     }
 
     @GetMapping("/fetch-recent")
