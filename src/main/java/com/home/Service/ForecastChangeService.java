@@ -9,10 +9,13 @@ import java.util.Map;
 
 import jakarta.annotation.PostConstruct;
 
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -77,7 +80,16 @@ public class ForecastChangeService {
 		incoming.setId(null);
 		incoming.setCurrentSnapshotJson(null);
 		incoming.setPreviousSnapshotJson(null);
-		return repo.save(incoming);
+		ForecastLocation saved = repo.save(incoming);
+		// Take the first snapshot inline so the user sees data immediately on the
+		// new card (otherwise they'd wait for the next 7am/7pm scheduled run).
+		try {
+			return refresh(saved.getId());
+		} catch (Exception e) {
+			System.err.println("[FORECAST CHANGE] initial refresh of new location '"
+				+ saved.getName() + "' failed: " + e.getMessage());
+			return saved;
+		}
 	}
 
 	public ForecastLocation update(Long id, ForecastLocation incoming) {
@@ -94,6 +106,61 @@ public class ForecastChangeService {
 
 	public void delete(Long id) {
 		repo.deleteById(id);
+	}
+
+	/**
+	 * Scheduled twice-daily refresh of every tracked location.
+	 *
+	 * Why 3:01 AM + 3:01 PM Central:
+	 *   - Each NWS Weather Forecast Office issues its updated zone / gridded
+	 *     forecast on a ~12-hour cadence — the major morning push is typically
+	 *     published by 3 AM local time and the afternoon push by 3 PM local time.
+	 *     For our Midwest tracked locations (all Central), those issuances are
+	 *     already in the gridded feed by 3 AM/PM CT.
+	 *   - Firing one minute after gives the publisher a small buffer without
+	 *     waiting hours past issuance — the snapshot is as fresh as possible.
+	 *   - The "previous" snapshot is always at most ~12 hours old, so each
+	 *     card's color shading means "what changed in the latest issuance" —
+	 *     useful regardless of when the user opens the page.
+	 *
+	 * Sequential to stay polite to NWS (one HTTP call per location).
+	 */
+	@Scheduled(cron = "0 1 3,15 * * *", zone = "America/Chicago")
+	public void scheduledRefreshAll() {
+		System.out.println("[FORECAST CHANGE] scheduled refresh starting");
+		int ok = 0, fail = 0;
+		for (ForecastLocation l : repo.findAll()) {
+			try { refresh(l.getId()); ok++; }
+			catch (Exception e) {
+				fail++;
+				System.err.println("[FORECAST CHANGE] refresh of '" + l.getName()
+					+ "' failed: " + e.getMessage());
+			}
+		}
+		System.out.println("[FORECAST CHANGE] scheduled refresh complete: "
+			+ ok + " ok, " + fail + " failed");
+	}
+
+	/**
+	 * On app startup, take an initial snapshot for any location that has never
+	 * had one (e.g. the five seeded defaults on a fresh install). Locations with
+	 * existing snapshots are left alone — the next 7am/7pm run will rotate them.
+	 */
+	@EventListener(ApplicationReadyEvent.class)
+	public void initialRefreshOnStartup() {
+		List<ForecastLocation> needsRefresh = repo.findAll().stream()
+			.filter(l -> l.getCurrentFetchedAt() == null)
+			.toList();
+		if (needsRefresh.isEmpty()) return;
+		System.out.println("[FORECAST CHANGE] taking initial snapshots for "
+			+ needsRefresh.size() + " new location(s)");
+		for (ForecastLocation l : needsRefresh) {
+			try { refresh(l.getId()); }
+			catch (Exception e) {
+				System.err.println("[FORECAST CHANGE] initial snapshot of '"
+					+ l.getName() + "' failed: " + e.getMessage());
+			}
+		}
 	}
 
 	/**
@@ -209,8 +276,9 @@ public class ForecastChangeService {
 				row.putIfAbsent("windDirection", p.get("windDirection"));
 			}
 		}
-		// Cap at 7 days for a clean weekly view
-		return byDay.values().stream().limit(7).toList();
+		// NWS gridpoint forecast typically returns ~7 days of periods, but we accept up
+		// to 10 here so any future expansion of the NWS feed flows through automatically.
+		return byDay.values().stream().limit(10).toList();
 	}
 
 	private static String dayKey(String name) {
