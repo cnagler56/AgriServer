@@ -13,6 +13,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -117,10 +120,86 @@ public class UsdaReportsService {
 		if (!stale) return;
 
 		System.out.println("[USDA REPORTS] yield " + commodity + " cache stale, refreshing");
+		doYieldRefresh(commodity, currentYear, priorYear);
+	}
+
+	/**
+	 * Fetch yield + harvested acres for both current and prior year.
+	 *
+	 * Order matters: yield is fetched first so the snapshots exist when the
+	 * harvested-acre pass attaches acres to them. Current-year harvested acres
+	 * are what make the in-season national yield accurate — NASS publishes them
+	 * monthly alongside the yield forecast.
+	 */
+	private void doYieldRefresh(String commodity, int currentYear, int priorYear) {
 		final String c = commodity;
-		safe(() -> fetchYieldForYear(c, currentYear), "yield " + c + " " + currentYear);
-		safe(() -> fetchYieldForYear(c, priorYear),   "yield " + c + " " + priorYear);
-		safe(() -> fetchAcresHarvestedForYear(c, priorYear), "acres harv " + c + " " + priorYear);
+		safe(() -> fetchYieldForYear(c, currentYear),     "yield " + c + " " + currentYear);
+		safe(() -> fetchYieldForYear(c, priorYear),       "yield " + c + " " + priorYear);
+		safe(() -> fetchHarvestedForYear(c, currentYear), "harvested " + c + " " + currentYear);
+		safe(() -> fetchHarvestedForYear(c, priorYear),   "harvested " + c + " " + priorYear);
+	}
+
+	/**
+	 * Monthly Crop Production refresh.
+	 *
+	 * NASS publishes the Crop Production report — yield AND harvested-acre
+	 * forecasts for corn / soybeans / wheat — around the 8th–12th of each month,
+	 * with the final Crop Production Annual Summary in January. We fire on the
+	 * 13th at 1 PM Eastern (safely after any same-month release + Quick Stats
+	 * ingest) and force-refresh all three commodities regardless of cache age.
+	 *
+	 * Running year-round is harmless: outside the active forecast window NASS
+	 * just returns the existing numbers and the upserts are idempotent. So a
+	 * user opening the Corn / Soybeans / Wheat yield report always sees the
+	 * latest USDA estimate with current-year harvested acres for the weighting.
+	 */
+	@Scheduled(cron = "0 0 13 13 * *", zone = "America/New_York")
+	public void refreshMonthlyCropProduction() {
+		int currentYear = Year.now().getValue();
+		int priorYear   = currentYear - 1;
+		System.out.println("[USDA REPORTS] monthly Crop Production refresh for " + currentYear);
+		int ok = 0, fail = 0;
+		for (String commodity : List.of("CORN", "SOYBEANS", "WHEAT")) {
+			try {
+				doYieldRefresh(commodity, currentYear, priorYear);
+				ok++;
+			} catch (Exception e) {
+				fail++;
+				System.err.println("[USDA REPORTS] monthly " + commodity + " failed: "
+					+ e.getClass().getSimpleName() + " - " + e.getMessage());
+			}
+		}
+		System.out.println("[USDA REPORTS] monthly refresh complete: " + ok + " ok, " + fail + " failed");
+	}
+
+	/**
+	 * Pre-warm the yield cache shortly after startup so the first visitor to a
+	 * Corn / Soybeans / Wheat report reads from the DB instead of paying for a
+	 * live NASS fetch.
+	 *
+	 * Runs on a background thread so it never delays the server becoming ready,
+	 * and goes through {@link #refreshYieldIfStale} — which is a no-op when the
+	 * data is already < REFRESH_DAYS old. So restarting the server repeatedly in
+	 * development only hits NASS on the first boot of each week, not every time.
+	 */
+	@EventListener(ApplicationReadyEvent.class)
+	public void prewarmOnStartup() {
+		Thread t = new Thread(() -> {
+			int currentYear = Year.now().getValue();
+			int priorYear   = currentYear - 1;
+			System.out.println("[USDA REPORTS] startup pre-warm checking yield cache…");
+			for (String commodity : List.of("CORN", "SOYBEANS", "WHEAT")) {
+				try {
+					refreshYieldIfStale(commodity, currentYear, priorYear);
+				} catch (Exception e) {
+					System.err.println("[USDA REPORTS] startup pre-warm " + commodity + " failed: "
+						+ e.getClass().getSimpleName() + " - " + e.getMessage());
+				}
+			}
+			System.out.println("[USDA REPORTS] startup pre-warm done");
+		}, "usda-prewarm");
+		t.setDaemon(true);
+		t.start();
 	}
 
 	private void fetchYieldForYear(String commodity, int year) {
@@ -159,14 +238,25 @@ public class UsdaReportsService {
 		}
 	}
 
-	private void fetchAcresHarvestedForYear(String commodity, int year) {
+	/**
+	 * Fetch AREA HARVESTED for a commodity/year across ALL reference periods and
+	 * attach each value to the matching yield snapshot (same state + reference
+	 * period). A yield snapshot whose period has no exact harvested match gets the
+	 * state's latest harvested estimate as a fallback.
+	 *
+	 * This is what makes the production-weighted national yield correct:
+	 *   national = Σ(state_yield × state_harvested_acres) / Σ(state_harvested_acres)
+	 *
+	 * Works for both the current year (in-season "YEAR - XXX FORECAST" periods)
+	 * and prior year (the single "YEAR" final).
+	 */
+	private void fetchHarvestedForYear(String commodity, int year) {
 		URI uri = UriComponentsBuilder.fromHttpUrl(NASS_URL)
 			.queryParam("key", apiKey)
 			.queryParam("commodity_desc", commodity)
 			.queryParam("statisticcat_desc", "AREA HARVESTED")
 			.queryParam("agg_level_desc", "STATE")
 			.queryParam("source_desc", "SURVEY")
-			.queryParam("reference_period_desc", "YEAR")
 			.queryParam("year", year)
 			.build().encode().toUri();
 
@@ -174,17 +264,32 @@ public class UsdaReportsService {
 		ApiResponse resp = restTemplate.getForObject(uri, ApiResponse.class);
 		if (resp == null || resp.getData() == null) return;
 
+		Map<String, Long> byStatePeriod    = new HashMap<>();  // "STATE|PERIOD" → acres
+		Map<String, Long> latestByState    = new HashMap<>();  // STATE → latest acres
+		Map<String, Integer> latestRank    = new HashMap<>();  // STATE → rank of latest
 		for (ApiItem item : resp.getData()) {
 			if (!isGrainRow(item.getShortDesc())) continue;
 			String state = item.getState();
+			String refPeriod = normalizeRefPeriod(item.getReferencePeriodDesc());
 			Long acres = parseAcres(item.getYield());
-			if (state == null || acres == null) continue;
+			if (state == null || refPeriod == null || acres == null) continue;
 
-			final String st = state;
-			final Long ac = acres;
-			yieldRepo.findByCommodityAndYear(commodity, year).stream()
-				.filter(s -> st.equals(s.getState()))
-				.forEach(s -> { s.setAcres(ac); yieldRepo.save(s); });
+			byStatePeriod.put(state + "|" + refPeriod, acres);
+			int rk = REF_PERIOD_RANK.getOrDefault(refPeriod, 0);
+			if (rk >= latestRank.getOrDefault(state, Integer.MIN_VALUE)) {
+				latestRank.put(state, rk);
+				latestByState.put(state, acres);
+			}
+		}
+		if (byStatePeriod.isEmpty()) return;
+
+		for (YieldSnapshot s : yieldRepo.findByCommodityAndYear(commodity, year)) {
+			Long exact = byStatePeriod.get(s.getState() + "|" + s.getReferencePeriod());
+			Long acres = exact != null ? exact : latestByState.get(s.getState());
+			if (acres != null) {
+				s.setAcres(acres);
+				yieldRepo.save(s);
+			}
 		}
 	}
 
@@ -254,6 +359,48 @@ public class UsdaReportsService {
 		final String c = commodity;
 		safe(() -> fetchPlantingForYear(c, currentYear), "planting " + c + " " + currentYear);
 		safe(() -> fetchPlantingForYear(c, priorYear),   "planting " + c + " " + priorYear);
+	}
+
+	/**
+	 * USDA publishes the <strong>Acreage</strong> report at <strong>noon Eastern on June 30</strong>
+	 * — this is the refined estimate of actual planted acres for the current crop year.
+	 * We fire 15 minutes after release so NASS Quick Stats has time to ingest the new
+	 * numbers, then force-refresh corn / soybeans / wheat planting data unconditionally
+	 * (bypassing the staleness gate).
+	 */
+	@Scheduled(cron = "0 15 12 30 6 *", zone = "America/New_York")
+	public void refreshJuneAcreageReport() {
+		int year = Year.now().getValue();
+		System.out.println("[USDA REPORTS] June 30 Acreage report — refreshing for " + year);
+		refreshPlantingForReport(year, "Acreage");
+	}
+
+	/**
+	 * <strong>Prospective Plantings</strong> report, the first farmer-intent number of the
+	 * year. Released noon Eastern on March 31. Same 15-minute buffer.
+	 */
+	@Scheduled(cron = "0 15 12 31 3 *", zone = "America/New_York")
+	public void refreshMarchPlantingsReport() {
+		int year = Year.now().getValue();
+		System.out.println("[USDA REPORTS] March 31 Prospective Plantings report — refreshing for " + year);
+		refreshPlantingForReport(year, "Plantings");
+	}
+
+	/** Force-fetch planted acres for each tracked grain commodity, swallowing per-commodity errors. */
+	private void refreshPlantingForReport(int year, String reportLabel) {
+		int ok = 0, fail = 0;
+		for (String commodity : List.of("CORN", "SOYBEANS", "WHEAT")) {
+			try {
+				fetchPlantingForYear(commodity, year);
+				ok++;
+			} catch (Exception e) {
+				fail++;
+				System.err.println("[USDA REPORTS] " + reportLabel + " " + commodity + " " + year
+					+ " failed: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+			}
+		}
+		System.out.println("[USDA REPORTS] " + reportLabel + " report refresh complete: "
+			+ ok + " ok, " + fail + " failed");
 	}
 
 	private void fetchPlantingForYear(String commodity, int year) {

@@ -10,7 +10,7 @@ import com.home.Domain.CommodityGroup;
 import com.home.Service.PriceService;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class PriceController {
 
 	private final PriceService priceService;

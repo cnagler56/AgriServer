@@ -24,7 +24,7 @@ import com.home.Repository.FieldRepository;
  */
 @RestController
 @RequestMapping("/api/fields")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class FieldController {
 
 	private final FieldRepository fieldRepository;

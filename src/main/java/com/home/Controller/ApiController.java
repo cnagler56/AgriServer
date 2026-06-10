@@ -14,7 +14,7 @@ import com.home.Repository.UserRepository;
 import com.home.Service.UserService;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class ApiController {
 	
 	
@@ -28,7 +28,7 @@ public class ApiController {
 
 
 //    @GetMapping("/usda")
-//    @CrossOrigin(origins = "http://localhost:3000")
+//    @CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 //    public List<User> getDataFromExternalApi() {
 //    	return this.userRepository.findAll();
 //        

@@ -1,6 +1,13 @@
 HELP.md
 target/
 bin/
+
+# Local environment — committed only as dev-env.example.ps1
+dev-env.ps1
+.env
+.env.local
+.env.*.local
+
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

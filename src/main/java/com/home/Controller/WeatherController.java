@@ -15,7 +15,7 @@ import com.home.Service.WeatherPersistenceService;
 import com.home.Service.WeatherService;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class WeatherController {
 
     private final WeatherService weatherService;

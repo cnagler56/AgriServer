@@ -19,7 +19,7 @@ import com.home.Service.ForecastChangeService;
 
 @RestController
 @RequestMapping("/api/forecast-locations")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class ForecastChangeController {
 
 	private final ForecastChangeService service;

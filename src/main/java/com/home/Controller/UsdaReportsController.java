@@ -12,7 +12,7 @@ import com.home.Service.UsdaReportsService;
 
 @RestController
 @RequestMapping("/api/usda-reports")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class UsdaReportsController {
 
 	private final UsdaReportsService service;
