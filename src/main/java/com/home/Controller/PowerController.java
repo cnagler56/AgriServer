@@ -21,7 +21,7 @@ import com.home.Service.PowerService;
  */
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class PowerController {
 
 	private final PowerService powerService;

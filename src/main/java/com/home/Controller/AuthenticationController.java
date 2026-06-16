@@ -40,7 +40,7 @@
 //
 //
 //@RestController
-//@CrossOrigin(origins = "http://localhost:3000")
+//@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 //public class AuthenticationController {
 //
 //    private final AuthenticationService authService;
@@ -57,7 +57,7 @@
 //        return ResponseEntity.ok(authService.register(request));
 //    }
 //
-////    @CrossOrigin(origins = "http://localhost:3000")
+////    @CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 ////    @GetMapping("/getIn")
 ////    public ResponseEntity<AuthenticationResponse> getIn(@RequestBody LoginDTO request) {
 //////    	 public int getIn(@RequestBody LoginDTO request) {

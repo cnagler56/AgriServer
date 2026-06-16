@@ -1,6 +1,16 @@
 HELP.md
 target/
 bin/
+
+# Local environment — committed only as dev-env.example.ps1
+dev-env.ps1
+.env
+.env.local
+.env.*.local
+# Profile-specific local config that may hold real credentials
+application-local.yml
+application-local.yaml
+
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

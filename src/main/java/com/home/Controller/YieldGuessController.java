@@ -15,7 +15,7 @@ import com.home.Repository.YieldGuessRepository;
 
 @RestController
 @RequestMapping("/api/yield-guess")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class YieldGuessController {
 
 	private final YieldGuessRepository repo;

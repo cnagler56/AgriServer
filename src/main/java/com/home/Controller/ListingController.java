@@ -13,7 +13,7 @@ import com.home.Domain.Listing;
 import com.home.Service.ListingService;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class ListingController {
 
 	private final ListingService listingService;

@@ -16,7 +16,7 @@ import com.home.Service.NASSYieldService;
 
 @RestController 
 @RequestMapping("/api")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class NASSYieldController {
 
 

@@ -17,7 +17,7 @@ import com.home.Service.AnimalService;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class AnimalController {
 	
 	@Autowired
