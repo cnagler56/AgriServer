@@ -9,20 +9,17 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import com.home.Domain.UserSession;
+import com.home.Domain.PasswordResetToken;
 
 @Repository
-public interface UserSessionRepository extends JpaRepository<UserSession, Long> {
+public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, Long> {
 
-    Optional<UserSession> findByToken(String token);
+    Optional<PasswordResetToken> findByTokenHash(String tokenHash);
 
-    void deleteByToken(String token);
-
-    /** Sign a user out of all devices — used after a password reset. */
+    /** Invalidate any outstanding reset tokens for a user before issuing a new one. */
     void deleteByUserId(Long userId);
 
-    /** Bulk delete of expired sessions. Called by the scheduled cleanup. */
     @Modifying
-    @Query("DELETE FROM UserSession s WHERE s.expiresAt < :now")
+    @Query("DELETE FROM PasswordResetToken t WHERE t.expiresAt < :now")
     int deleteExpiredBefore(@Param("now") LocalDateTime now);
 }

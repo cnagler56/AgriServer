@@ -35,6 +35,14 @@
 			<artifactId>spring-security-crypto</artifactId>
 		</dependency>
 		<!--
+			SMTP email (password-reset links). Inert until spring.mail.host is
+			set — until then EmailService logs the link to the console instead.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+		<!--
 			Reads .env from the project root at startup and exposes the values
 			to Spring's property resolver. Real OS env vars still win, so
 			production deployments don't accidentally pick up a committed .env.
