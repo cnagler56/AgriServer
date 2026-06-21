@@ -99,12 +99,36 @@ public class NASSYieldService {
 	}
 
 	/**
-	 * Fetch state-level YIELD for the last `yearsBack` years (inclusive of current year).
-	 * One NASS call using year_GE filter. Acres are not pulled — this is for the time-series chart.
+	 * Fetch state-level YIELD for the last `yearsBack` years (inclusive of current year),
+	 * paired with AREA HARVESTED so the chart can compute a production-weighted national
+	 * average (a plain mean of state yields overstates badly — small high-yield states
+	 * count the same as Kansas).
 	 */
 	public List<NASSYieldData> fetchYieldHistory(String grain, int yearsBack) {
 		int currentYear = java.time.Year.now().getValue();
 		int yearGE = currentYear - Math.max(1, yearsBack) + 1;
+
+		// Acres for the same range, keyed by state|class|year, so each yield row can be weighted.
+		Map<String, String> acresMap = new HashMap<>();
+		try {
+			URI acresUrl = UriComponentsBuilder.fromHttpUrl(NASS_URL)
+					.queryParam("key", apiKey)
+					.queryParam("commodity_desc", grain)
+					.queryParam("statisticcat_desc", "AREA HARVESTED")
+					.queryParam("agg_level_desc", "STATE")
+					.queryParam("source_desc", "SURVEY")
+					.queryParam("reference_period_desc", "YEAR")
+					.queryParam("year__GE", yearGE)
+					.build().encode().toUri();
+			ApiResponse acresResp = restTemplate.getForObject(acresUrl, ApiResponse.class);
+			if (acresResp != null && acresResp.getData() != null) {
+				for (ApiItem a : acresResp.getData()) {
+					acresMap.put(a.getState() + "|" + classPrefix(a.getShortDesc()) + "|" + a.getYear(), a.getYield());
+				}
+			}
+		} catch (Exception e) {
+			System.err.println("[NASS HISTORY] acres fetch failed (chart will fall back to simple avg): " + e.getMessage());
+		}
 
 		URI url = UriComponentsBuilder.fromHttpUrl(NASS_URL)
 				.queryParam("key", apiKey)
@@ -133,6 +157,8 @@ public class NASSYieldService {
 				entity.setState(item.getState());
 				entity.setYear(item.getYear());
 				entity.setYield(item.getYield());
+				entity.setAcresValue(acresMap.getOrDefault(
+					item.getState() + "|" + classPrefix(item.getShortDesc()) + "|" + item.getYear(), "N/A"));
 				entity.setLoadTime(item.getLoad_time());
 				out.add(entity);
 			}

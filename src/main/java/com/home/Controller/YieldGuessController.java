@@ -24,7 +24,8 @@ public class YieldGuessController {
 
 	@GetMapping("/{commodity}")
 	public List<YieldGuess> list(@PathVariable String commodity) {
-		return repo.findByCommodityOrderByDateDesc(commodity.toUpperCase());
+		// Public roster: hide "cowardly" (unshared) guesses.
+		return repo.findSharedByCommodity(commodity.toUpperCase());
 	}
 
 	@PostMapping

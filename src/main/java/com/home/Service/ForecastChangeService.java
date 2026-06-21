@@ -49,19 +49,53 @@ public class ForecastChangeService {
 		this.repo = repo;
 	}
 
-	/** Seed five default Midwest locations on first startup. */
+	/**
+	 * Reconcile the default Midwest location set on startup.
+	 *
+	 * Idempotent + backfilling: any location in the desired list whose name isn't
+	 * already tracked gets inserted. So this seeds a fresh install AND tops up an
+	 * existing DB with newly-added defaults, without ever duplicating. New rows
+	 * get their first snapshot via {@link #initialRefreshOnStartup()} (which fires
+	 * for anything with a null currentFetchedAt). All coords sit inside the
+	 * Midwest map's bounding box (lat 35–50, lon −104.5 to −80).
+	 */
 	@PostConstruct
 	void seedDefaults() {
-		if (repo.count() > 0) return;
-		List<ForecastLocation> seeds = List.of(
-			make("Winnebago, MN",    43.7686, -94.1655),
-			make("Brookings, SD",    44.3114, -96.7898),
-			make("Le Mars, IA",      42.7958, -96.1664),
-			make("Champaign, IL",    40.1164, -88.2434),
-			make("Indianapolis, IN", 39.7684, -86.1581)
+		List<ForecastLocation> desired = List.of(
+			// ── original five ──
+			make("Winnebago, MN",     43.7686,  -94.1655),
+			make("Brookings, SD",     44.3114,  -96.7898),
+			make("Le Mars, IA",       42.7958,  -96.1664),
+			make("Champaign, IL",     40.1164,  -88.2434),
+			make("Indianapolis, IN",  39.7684,  -86.1581),
+			// ── added: broader corn-belt + map coverage ──
+			make("Fargo, ND",         46.8772,  -96.7898),
+			make("Madison, WI",       43.0731,  -89.4012),
+			make("Eau Claire, WI",    44.8113,  -91.4985),
+			make("Lansing, MI",       42.7325,  -84.5555),
+			make("Columbus, OH",      39.9612,  -82.9988),
+			make("Toledo, OH",        41.6528,  -83.5379),
+			make("Columbia, MO",      38.9517,  -92.3341),
+			make("Springfield, MO",   37.2090,  -93.2923),
+			make("Salina, KS",        38.8403,  -97.6114),
+			make("Dodge City, KS",    37.7528, -100.0171),
+			make("Lincoln, NE",       40.8136,  -96.7026),
+			make("Grand Island, NE",  40.9264,  -98.3420),
+			make("Bowling Green, KY", 36.9685,  -86.4808),
+			make("Jackson, TN",       35.6145,  -88.8139),
+			make("Ames, IA",          42.0308,  -93.6319)
 		);
-		repo.saveAll(seeds);
-		System.out.println("[FORECAST CHANGE] seeded " + seeds.size() + " default locations");
+
+		java.util.Set<String> existing = new java.util.HashSet<>();
+		for (ForecastLocation l : repo.findAll()) existing.add(l.getName());
+
+		List<ForecastLocation> toAdd = desired.stream()
+			.filter(l -> !existing.contains(l.getName()))
+			.toList();
+		if (toAdd.isEmpty()) return;
+
+		repo.saveAll(toAdd);
+		System.out.println("[FORECAST CHANGE] seeded " + toAdd.size() + " location(s)");
 	}
 
 	private ForecastLocation make(String name, double lat, double lon) {
@@ -127,7 +161,12 @@ public class ForecastChangeService {
 	 */
 	@Scheduled(cron = "0 1 3,15 * * *", zone = "America/Chicago")
 	public void scheduledRefreshAll() {
-		System.out.println("[FORECAST CHANGE] scheduled refresh starting");
+		refreshAll();
+	}
+
+	/** Refresh every tracked location now and return the updated, name-sorted list. */
+	public List<ForecastLocation> refreshAll() {
+		System.out.println("[FORECAST CHANGE] refresh-all starting");
 		int ok = 0, fail = 0;
 		for (ForecastLocation l : repo.findAll()) {
 			try { refresh(l.getId()); ok++; }
@@ -137,27 +176,37 @@ public class ForecastChangeService {
 					+ "' failed: " + e.getMessage());
 			}
 		}
-		System.out.println("[FORECAST CHANGE] scheduled refresh complete: "
-			+ ok + " ok, " + fail + " failed");
+		System.out.println("[FORECAST CHANGE] refresh-all complete: " + ok + " ok, " + fail + " failed");
+		return repo.findAllByOrderByNameAsc();
 	}
 
+	/** A snapshot older than this on startup is considered stale and re-pulled. */
+	private static final int STALE_REFRESH_HOURS = 6;
+
 	/**
-	 * On app startup, take an initial snapshot for any location that has never
-	 * had one (e.g. the five seeded defaults on a fresh install). Locations with
-	 * existing snapshots are left alone — the next 7am/7pm run will rotate them.
+	 * On app startup, refresh any location that has never had a snapshot OR whose
+	 * latest snapshot is more than {@link #STALE_REFRESH_HOURS} hours old.
+	 *
+	 * The scheduled 3am/3pm job only fires while the app is running; when the app
+	 * is run locally (and isn't up at those times) locations would otherwise stay
+	 * frozen at whatever they grabbed when first added. Topping up stale locations
+	 * on every startup keeps the data current without over-rotating (a snapshot
+	 * younger than the threshold is left alone, so the previous/current deltas stay
+	 * meaningful).
 	 */
 	@EventListener(ApplicationReadyEvent.class)
 	public void initialRefreshOnStartup() {
+		LocalDateTime staleBefore = LocalDateTime.now().minusHours(STALE_REFRESH_HOURS);
 		List<ForecastLocation> needsRefresh = repo.findAll().stream()
-			.filter(l -> l.getCurrentFetchedAt() == null)
+			.filter(l -> l.getCurrentFetchedAt() == null || l.getCurrentFetchedAt().isBefore(staleBefore))
 			.toList();
 		if (needsRefresh.isEmpty()) return;
-		System.out.println("[FORECAST CHANGE] taking initial snapshots for "
-			+ needsRefresh.size() + " new location(s)");
+		System.out.println("[FORECAST CHANGE] startup refresh of " + needsRefresh.size()
+			+ " location(s) (new or > " + STALE_REFRESH_HOURS + "h old)");
 		for (ForecastLocation l : needsRefresh) {
 			try { refresh(l.getId()); }
 			catch (Exception e) {
-				System.err.println("[FORECAST CHANGE] initial snapshot of '"
+				System.err.println("[FORECAST CHANGE] startup refresh of '"
 					+ l.getName() + "' failed: " + e.getMessage());
 			}
 		}

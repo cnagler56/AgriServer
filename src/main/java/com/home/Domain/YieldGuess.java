@@ -31,6 +31,9 @@ public class YieldGuess {
 	private String commodity;       // "CORN" / "SOYBEANS" / "WHEAT"
 
 	@JsonProperty
+	private Integer year;           // crop year the guess targets (set on save)
+
+	@JsonProperty
 	private Double estimate;        // National yield estimate in bu/acre
 
 	@JsonProperty
@@ -48,14 +51,29 @@ public class YieldGuess {
 	@JsonProperty
 	private LocalDateTime date;
 
+	/**
+	 * Whether this guess is shown in the public Community Guesses list. A
+	 * "cowardly" submit sets this false — the guess still counts toward the
+	 * contest results, it's just hidden from the public roster.
+	 */
+	@JsonProperty
+	private Boolean shared;
+
 	@PrePersist
-	void onCreate() { if (date == null) date = LocalDateTime.now(); }
+	void onCreate() {
+		if (date == null) date = LocalDateTime.now();
+		if (year == null) year = java.time.Year.now().getValue();
+		if (shared == null) shared = Boolean.TRUE;
+	}
 
 	public Long getId() { return id; }
 	public void setId(Long id) { this.id = id; }
 
 	public String getCommodity() { return commodity; }
 	public void setCommodity(String commodity) { this.commodity = commodity; }
+
+	public Integer getYear() { return year; }
+	public void setYear(Integer year) { this.year = year; }
 
 	public Double getEstimate() { return estimate; }
 	public void setEstimate(Double estimate) { this.estimate = estimate; }
@@ -74,4 +92,7 @@ public class YieldGuess {
 
 	public LocalDateTime getDate() { return date; }
 	public void setDate(LocalDateTime date) { this.date = date; }
+
+	public Boolean getShared() { return shared; }
+	public void setShared(Boolean shared) { this.shared = shared; }
 }

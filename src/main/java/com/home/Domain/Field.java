@@ -46,7 +46,14 @@ public class Field {
 	@JsonProperty
 	private LocalDate plantedOn;
 
-	/** Coordinates for weather / soil-moisture / GDD lookups (optional). */
+	@JsonProperty
+	private LocalDate harvestedOn;
+
+	/** Realized yield, bu/acre (or the crop's usual unit). */
+	@JsonProperty
+	private Double yieldBu;
+
+	/** Coordinates for weather / soil-moisture / GDD lookups (optional, legacy). */
 	@JsonProperty
 	private Double lat;
 
@@ -80,6 +87,12 @@ public class Field {
 
 	public String getCrop() { return crop; }
 	public void setCrop(String crop) { this.crop = crop; }
+
+	public LocalDate getHarvestedOn() { return harvestedOn; }
+	public void setHarvestedOn(LocalDate harvestedOn) { this.harvestedOn = harvestedOn; }
+
+	public Double getYieldBu() { return yieldBu; }
+	public void setYieldBu(Double yieldBu) { this.yieldBu = yieldBu; }
 
 	public String getVariety() { return variety; }
 	public void setVariety(String variety) { this.variety = variety; }
