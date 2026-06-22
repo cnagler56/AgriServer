@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.home.Domain.LoginDTO;
+import com.home.Domain.Role;
 import com.home.Domain.User;
 import com.home.Repository.UserRepository;
 
@@ -101,6 +102,9 @@ public class UserService {
         // Hash the password — the raw value never hits the database
         incoming.setPassword(passwordEncoder.encode(incoming.getPassword()));
         incoming.setActive(Boolean.TRUE);
+        // Always register as a plain USER — never trust a client-supplied role.
+        // Admins are promoted out-of-band (a DB update), never via sign-up.
+        incoming.setRole(Role.USER);
         return this.userRepository.save(incoming);
     }
 }

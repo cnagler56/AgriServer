@@ -37,10 +37,22 @@ public class AnimalController {
 	
 	@GetMapping("/cattle")
     public ResponseEntity<List<CattleData>> fetchCattleData(
-    		@RequestParam String month, 
+    		@RequestParam String month,
     		@RequestParam String year) {
         List<CattleData> data = animalService.fetchCattleOnFeedReport(month, year);
         return ResponseEntity.ok(data);
     }
+
+	/** National monthly Cattle on Feed headline (1,000+ head feedlots). */
+	@GetMapping("/cattle-on-feed")
+	public java.util.Map<String, Object> cattleOnFeed() {
+		return animalService.getCattleOnFeed();
+	}
+
+	/** National quarterly Hogs & Pigs headline (all / breeding / market). */
+	@GetMapping("/hogs-pigs")
+	public java.util.Map<String, Object> hogsAndPigs() {
+		return animalService.getHogsAndPigs();
+	}
 
 }

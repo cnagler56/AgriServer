@@ -69,6 +69,7 @@ import jakarta.persistence.Table;
 	@JsonProperty
 	Boolean active;
 
+	@JsonProperty
 	@Enumerated(value = EnumType.STRING)
 	Role roles;
 

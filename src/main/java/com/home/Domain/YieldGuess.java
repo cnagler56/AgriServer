@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -31,6 +32,9 @@ public class YieldGuess {
 	private String commodity;       // "CORN" / "SOYBEANS" / "WHEAT"
 
 	@JsonProperty
+	private Integer year;           // crop year the guess targets (set on save)
+
+	@JsonProperty
 	private Double estimate;        // National yield estimate in bu/acre
 
 	@JsonProperty
@@ -48,14 +52,29 @@ public class YieldGuess {
 	@JsonProperty
 	private LocalDateTime date;
 
+	/**
+	 * Optional explanation the user attaches when they revise their estimate
+	 * ("USDA bumped Iowa", etc.). Shown in the public change log. Null/blank
+	 * on a first submit or when they don't bother to add one.
+	 */
+	@JsonProperty
+	@Column(length = 280)
+	private String note;
+
 	@PrePersist
-	void onCreate() { if (date == null) date = LocalDateTime.now(); }
+	void onCreate() {
+		if (date == null) date = LocalDateTime.now();
+		if (year == null) year = java.time.Year.now().getValue();
+	}
 
 	public Long getId() { return id; }
 	public void setId(Long id) { this.id = id; }
 
 	public String getCommodity() { return commodity; }
 	public void setCommodity(String commodity) { this.commodity = commodity; }
+
+	public Integer getYear() { return year; }
+	public void setYear(Integer year) { this.year = year; }
 
 	public Double getEstimate() { return estimate; }
 	public void setEstimate(Double estimate) { this.estimate = estimate; }
@@ -74,4 +93,7 @@ public class YieldGuess {
 
 	public LocalDateTime getDate() { return date; }
 	public void setDate(LocalDateTime date) { this.date = date; }
+
+	public String getNote() { return note; }
+	public void setNote(String note) { this.note = note; }
 }

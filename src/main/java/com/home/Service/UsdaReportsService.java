@@ -110,6 +110,70 @@ public class UsdaReportsService {
 		return out;
 	}
 
+	/**
+	 * USDA's national yield for ONE published report period.
+	 *
+	 * `cutoff` is when that report became public (NASS load_time) — the contest
+	 * deadline: only guesses submitted strictly before this count for the period.
+	 */
+	public record PeriodYield(String refPeriod, int year, Double yield,
+			LocalDateTime cutoff, int stateCount) {}
+
+	/**
+	 * Compute USDA's production-weighted national yield for EACH published report
+	 * period (AUG / SEP / OCT / NOV / YEAR …), newest first.
+	 *
+	 *   national = Σ(state_yield × state_harvested_acres) / Σ(state_harvested_acres)
+	 *
+	 * Each entry carries the report's publication timestamp so the results scorer
+	 * can enforce "guess must predate the report." Falls back to the prior year if
+	 * the current year has no data yet.
+	 */
+	public List<PeriodYield> getNationalYieldByPeriod(String commodity) {
+		commodity = commodity.toUpperCase();
+		int currentYear = Year.now().getValue();
+		int priorYear   = currentYear - 1;
+		refreshYieldIfStale(commodity, currentYear, priorYear);
+
+		List<YieldSnapshot> rows = yieldRepo.findByCommodityAndYear(commodity, currentYear);
+		int usedYear = currentYear;
+		if (rows.isEmpty()) {
+			rows = yieldRepo.findByCommodityAndYear(commodity, priorYear);
+			usedYear = priorYear;
+		}
+
+		Map<String, List<YieldSnapshot>> byPeriod = new HashMap<>();
+		for (YieldSnapshot s : rows) {
+			if (s.getReferencePeriod() == null) continue;
+			byPeriod.computeIfAbsent(s.getReferencePeriod(), k -> new ArrayList<>()).add(s);
+		}
+
+		List<PeriodYield> out = new ArrayList<>();
+		for (Map.Entry<String, List<YieldSnapshot>> e : byPeriod.entrySet()) {
+			double wsum = 0, asum = 0;
+			LocalDateTime cutoff = null;
+			for (YieldSnapshot s : e.getValue()) {
+				if (s.getYieldBu() != null && s.getAcres() != null) {
+					wsum += s.getYieldBu() * s.getAcres();
+					asum += s.getAcres();
+				}
+				LocalDateTime lt = s.getNassLoadTime();
+				if (lt != null && (cutoff == null || lt.isAfter(cutoff))) cutoff = lt;
+			}
+			if (asum > 0) {
+				double y = Math.round((wsum / asum) * 10) / 10.0;
+				out.add(new PeriodYield(e.getKey(), usedYear, y, cutoff, e.getValue().size()));
+			}
+		}
+		// Newest report first (highest rank).
+		out.sort((a, b) -> Integer.compare(rankOfPeriod(b.refPeriod()), rankOfPeriod(a.refPeriod())));
+		return out;
+	}
+
+	private int rankOfPeriod(String p) {
+		return p == null ? 0 : REF_PERIOD_RANK.getOrDefault(p, 0);
+	}
+
 	private void refreshYieldIfStale(String commodity, int currentYear, int priorYear) {
 		Optional<YieldSnapshot> newest = yieldRepo.findFirstByCommodityOrderByFetchedAtDesc(commodity);
 		boolean stale = newest.map(s -> {
@@ -269,6 +333,9 @@ public class UsdaReportsService {
 		Map<String, Integer> latestRank    = new HashMap<>();  // STATE → rank of latest
 		for (ApiItem item : resp.getData()) {
 			if (!isGrainRow(item.getShortDesc())) continue;
+			// Same guard as planting: drop PCT-breakdown rows so the harvested-acre
+			// weighting for the national yield is real acres, not a percentage.
+			if (!isAcresRow(item.getUnitDesc())) continue;
 			String state = item.getState();
 			String refPeriod = normalizeRefPeriod(item.getReferencePeriodDesc());
 			Long acres = parseAcres(item.getYield());
@@ -420,8 +487,17 @@ public class UsdaReportsService {
 		LocalDateTime now = LocalDateTime.now();
 		for (ApiItem item : resp.getData()) {
 			if (!isGrainRow(item.getShortDesc())) continue;
+			// CRITICAL: the AREA PLANTED query also returns "PCT BY SIZE GROUP" /
+			// "PCT BY TYPE" (biotech) breakdown rows whose Value is a single/double-
+			// digit percentage. Those would collapse onto the same (state, year,
+			// refPeriod) key and overwrite the real acres. Keep only rows in ACRES.
+			if (!isAcresRow(item.getUnitDesc())) continue;
+
 			String state = item.getState();
-			String refPeriod = normalizeRefPeriod(item.getReferencePeriodDesc());
+			// Permissive ref-period key for planting — we pick the latest by NASS
+			// load_time, not by rank, so we keep the Mar/Jun "ACREAGE" report rows
+			// too (which the yield-oriented normalizer would otherwise drop).
+			String refPeriod = plantingRefPeriod(item.getReferencePeriodDesc());
 			Long acres = parseAcres(item.getYield());
 			if (state == null || refPeriod == null || acres == null) continue;
 
@@ -450,6 +526,28 @@ public class UsdaReportsService {
 		if (s.contains("FOR OIL")) return false;
 		if (s.contains("FOR BEANS")) return false;
 		return true;
+	}
+
+	/**
+	 * True only for rows actually measured in acres. The AREA PLANTED / AREA
+	 * HARVESTED queries also return "PCT BY SIZE GROUP" and "PCT BY TYPE"
+	 * breakdown rows whose values are percentages — those must be dropped.
+	 */
+	private static boolean isAcresRow(String unitDesc) {
+		return unitDesc != null && unitDesc.trim().equalsIgnoreCase("ACRES");
+	}
+
+	/**
+	 * Reference-period key for planting snapshots. Unlike yield (which ranks
+	 * periods), planting just picks the latest by NASS load_time — so we keep
+	 * the raw period (e.g. "YEAR", "YEAR - MAR ACREAGE", "YEAR - JUN ACREAGE")
+	 * rather than running it through the yield-oriented normalizer that would
+	 * drop the "ACREAGE" report rows. Capped at the column length.
+	 */
+	private static String plantingRefPeriod(String raw) {
+		if (raw == null || raw.isBlank()) return null;
+		String r = raw.trim().toUpperCase();
+		return r.length() > 32 ? r.substring(0, 32) : r;
 	}
 
 	private Map<String, YieldSnapshot> pickLatestPerState(List<YieldSnapshot> rows) {
