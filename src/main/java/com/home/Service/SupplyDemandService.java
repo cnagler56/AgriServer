@@ -51,7 +51,7 @@ public class SupplyDemandService {
 	private static final int STALE_DAYS = 20;
 
 	/** Display key per commodity. */
-	private static final String[] COMMODITIES = { "CORN", "SOYBEANS", "WHEAT" };
+	private static final String[] COMMODITIES = { "CORN", "SOYBEANS", "WHEAT", "SOYBEAN_MEAL", "SOYBEAN_OIL" };
 
 	private final RestTemplate restTemplate;
 	private final SupplyDemandRepository repo;
@@ -78,7 +78,11 @@ public class SupplyDemandService {
 	public void prewarm() {
 		new Thread(() -> {
 			try {
-				if (repo.count() == 0 || isStale()) ingestAll();
+				// Re-ingest if the cache is empty/stale, untagged, or missing a commodity
+				// (the last covers newly-added commodities like soybean meal/oil).
+				boolean missing = false;
+				for (String c : COMMODITIES) if (repo.countByCommodity(c) == 0) { missing = true; break; }
+				if (repo.count() == 0 || isStale() || repo.existsByMonthIsNull() || missing) ingestAll();
 			} catch (Exception e) {
 				System.err.println("[WASDE] startup ingest failed: " + e.getMessage());
 			}
@@ -105,12 +109,17 @@ public class SupplyDemandService {
 
 	@Transactional
 	public void ingestAll() {
-		String csv = downloadCsv();
-		if (csv == null) {
-			System.err.println("[WASDE] could not download a WASDE CSV (set WASDE_CSV_URL to pin one)");
+		List<String> csvs = collectCsvs();
+		if (csvs.isEmpty()) {
+			System.err.println("[WASDE] could not find a WASDE CSV (set WASDE_CSV_PATH or WASDE_CSV_URL)");
 			return;
 		}
-		Map<String, List<SupplyDemand>> byCommodity = parse(csv);
+		// Parse every monthly file we have so the dashboard can show month-over-month
+		// changes. Seq is shared across files so a given attribute keeps a stable row
+		// order regardless of which month it first appeared in.
+		Map<String, List<SupplyDemand>> byCommodity = new LinkedHashMap<>();
+		Map<String, Integer> seqByAttr = new HashMap<>();
+		for (String csv : csvs) parseInto(csv, byCommodity, seqByAttr);
 		if (byCommodity.isEmpty()) {
 			System.err.println("[WASDE] parsed 0 usable rows — check the CSV column layout");
 			return;
@@ -122,6 +131,38 @@ public class SupplyDemandService {
 			repo.saveAll(rows);
 			System.out.println("[WASDE] cached " + rows.size() + " rows for " + c);
 		}
+	}
+
+	/** All WASDE CSVs we can read: every *.csv in the local folder, else a single download. */
+	private List<String> collectCsvs() {
+		List<String> out = new ArrayList<>();
+		if (csvPath != null && !csvPath.isBlank()) {
+			try {
+				Path p = Path.of(csvPath.trim());
+				if (Files.isDirectory(p)) {
+					try (var stream = Files.list(p)) {
+						List<Path> files = stream
+							.filter(f -> {
+								String n = f.getFileName().toString().toLowerCase();
+								return n.endsWith(".csv") && n.contains("wasde");
+							})
+							.sorted(Comparator.comparingLong(f -> f.toFile().lastModified()))
+							.toList();
+						for (Path f : files) {
+							System.out.println("[WASDE] reading local file " + f);
+							out.add(new String(Files.readAllBytes(f), StandardCharsets.ISO_8859_1));
+						}
+					}
+					if (!out.isEmpty()) return out;
+				}
+			} catch (Exception e) {
+				System.err.println("[WASDE] local folder read failed: " + e.getMessage());
+			}
+		}
+		// Single-file path or remote download (no history, but keeps the page populated).
+		String one = downloadCsv();
+		if (one != null) out.add(one);
+		return out;
 	}
 
 	/** Local file/folder first (reliable), then a pinned URL, then auto-constructed URLs. */
@@ -195,9 +236,14 @@ public class SupplyDemandService {
 		}
 	}
 
-	private Map<String, List<SupplyDemand>> parse(String csv) {
+	/**
+	 * Parse one monthly CSV, appending rows to {@code out} and reusing {@code seqByAttr}
+	 * so attribute row-order stays stable across months. Each row is tagged with a
+	 * sortable snapshot key (YYYYMM in {@code month}) so the API can find the prior month.
+	 */
+	private void parseInto(String csv, Map<String, List<SupplyDemand>> out, Map<String, Integer> seqByAttr) {
 		String[] lines = csv.split("\r?\n");
-		if (lines.length < 2) return Map.of();
+		if (lines.length < 2) return;
 
 		List<String> header = parseLine(lines[0]);
 		int iComm = col(header, "commodity");
@@ -207,14 +253,12 @@ public class SupplyDemandService {
 		int iUnit = col(header, "unit");
 		int iYear = col(header, "marketyear", "year");
 		int iDate = col(header, "reportdate", "releasedate");
+		int iFYear = col(header, "forecastyear");
+		int iFMon  = col(header, "forecastmonth");
 		if (iComm < 0 || iReg < 0 || iAttr < 0 || iVal < 0 || iYear < 0) {
 			System.err.println("[WASDE] header missing required columns: " + header);
-			return Map.of();
+			return;
 		}
-
-		Map<String, List<SupplyDemand>> out = new LinkedHashMap<>();
-		// per (commodity|region) → attribute → seq, so attribute order is stable
-		Map<String, Integer> seqByAttr = new HashMap<>();
 
 		for (int i = 1; i < lines.length; i++) {
 			if (lines[i].isBlank()) continue;
@@ -231,6 +275,7 @@ public class SupplyDemandService {
 			if (value == null) continue;
 
 			String attribute = get(f, iAttr).trim();
+			String reportDate = iDate >= 0 ? get(f, iDate).trim() : null;
 			String key = commodity + "|" + region + "|" + attribute;
 			int seq = seqByAttr.computeIfAbsent(key, k -> seqByAttr.size());
 
@@ -241,11 +286,29 @@ public class SupplyDemandService {
 			sd.setAttribute(attribute);
 			sd.setValue(value);
 			sd.setUnit(iUnit >= 0 ? get(f, iUnit).trim() : "");
-			sd.setReportDate(iDate >= 0 ? get(f, iDate).trim() : null);
+			sd.setReportDate(reportDate);
+			sd.setMonth(snapshotKey(get(f, iFYear), get(f, iFMon), reportDate));
 			sd.setSeq(seq);
 			out.computeIfAbsent(commodity, k -> new ArrayList<>()).add(sd);
 		}
-		return out;
+	}
+
+	private static final Map<String, Integer> MONTHS = Map.ofEntries(
+		Map.entry("jan", 1), Map.entry("feb", 2), Map.entry("mar", 3), Map.entry("apr", 4),
+		Map.entry("may", 5), Map.entry("jun", 6), Map.entry("jul", 7), Map.entry("aug", 8),
+		Map.entry("sep", 9), Map.entry("oct", 10), Map.entry("nov", 11), Map.entry("dec", 12));
+
+	/** Sortable snapshot id (YYYYMM) from forecast year/month, falling back to "Month YYYY". */
+	private static Integer snapshotKey(String fyear, String fmon, String reportDate) {
+		Integer y = parseYear(fyear);
+		Integer m = parseNum(fmon) != null ? parseNum(fmon).intValue() : null;
+		if (y == null && reportDate != null) y = parseYear(reportDate);
+		if (m == null && reportDate != null) {
+			String n = norm(reportDate);
+			for (var e : MONTHS.entrySet()) if (n.startsWith(e.getKey()) || n.contains(e.getKey())) { m = e.getValue(); break; }
+		}
+		if (y == null || m == null) return null;
+		return y * 100 + m;
 	}
 
 	/* ── Read for the API ───────────────────────────────────────────────── */
@@ -264,28 +327,52 @@ public class SupplyDemandService {
 			return out;
 		}
 
-		// Latest up-to-3 marketing years (newest first).
+		// Snapshots are tagged by month (YYYYMM). The newest snapshot is what we display;
+		// the one before it supplies the month-over-month comparison for the new-crop year.
+		Integer latestMonth = rows.stream().map(SupplyDemand::getMonth)
+			.filter(java.util.Objects::nonNull).max(Integer::compareTo).orElse(null);
+		Integer prevMonth = rows.stream().map(SupplyDemand::getMonth)
+			.filter(m -> m != null && (latestMonth == null || m < latestMonth))
+			.max(Integer::compareTo).orElse(null);
+
+		List<SupplyDemand> current = rows.stream()
+			.filter(r -> latestMonth == null || latestMonth.equals(r.getMonth())).toList();
+		List<SupplyDemand> prev = prevMonth == null ? List.of()
+			: rows.stream().filter(r -> prevMonth.equals(r.getMonth())).toList();
+
+		// Latest up-to-3 marketing years (newest first) from the current snapshot.
 		TreeSet<Integer> ys = new TreeSet<>(java.util.Collections.reverseOrder());
 		String reportDate = null;
 		LocalDateTime updated = null;
-		for (SupplyDemand r : rows) {
+		for (SupplyDemand r : current) {
 			ys.add(r.getMarketYear());
 			if (reportDate == null && r.getReportDate() != null) reportDate = r.getReportDate();
 			if (r.getUpdatedAt() != null && (updated == null || r.getUpdatedAt().isAfter(updated))) updated = r.getUpdatedAt();
 		}
 		List<Integer> years = new ArrayList<>(ys).subList(0, Math.min(3, ys.size()));
+		int newestYear = years.isEmpty() ? Integer.MIN_VALUE : years.get(0);
 
 		out.put("years", years);
 		out.put("reportDate", reportDate);
+		out.put("prevReportDate", prev.isEmpty() ? null : prev.get(0).getReportDate());
 		out.put("updatedAt", updated == null ? null : updated.toString());
-		out.put("us", buildRegion(rows, "US", years));
-		out.put("world", buildRegion(rows, "WORLD", years));
+		out.put("us", buildRegion(current, prev, "US", years, newestYear));
+		out.put("world", buildRegion(current, prev, "WORLD", years, newestYear));
 		return out;
 	}
 
-	private List<Map<String, Object>> buildRegion(List<SupplyDemand> rows, String region, List<Integer> years) {
+	private List<Map<String, Object>> buildRegion(List<SupplyDemand> current, List<SupplyDemand> prev,
+			String region, List<Integer> years, int newestYear) {
+		// Previous month's value for the new-crop year, per attribute (for the change note).
+		Map<String, Double> prevByAttr = new HashMap<>();
+		for (SupplyDemand r : prev) {
+			if (!region.equals(r.getRegion())) continue;
+			if ("US".equals(region) && isMetric(r.getUnit())) continue;
+			if (r.getMarketYear() != null && r.getMarketYear() == newestYear) prevByAttr.put(r.getAttribute(), r.getValue());
+		}
+
 		Map<String, Map<String, Object>> byAttr = new LinkedHashMap<>();
-		for (SupplyDemand r : rows) {
+		for (SupplyDemand r : current) {
 			if (!region.equals(r.getRegion())) continue;
 			// WASDE lists "United States" both as the U.S. balance sheet (bushels)
 			// and as a metric line inside the World table. Keep only the bushel/acre
@@ -297,6 +384,7 @@ public class SupplyDemandService {
 				m.put("unit", r.getUnit());
 				m.put("seq", r.getSeq());
 				m.put("values", new ArrayList<Double>(java.util.Collections.nCopies(years.size(), null)));
+				m.put("prev", prevByAttr.get(r.getAttribute()));   // new-crop year, prior month (nullable)
 				return m;
 			});
 			int idx = years.indexOf(r.getMarketYear());
@@ -332,7 +420,16 @@ public class SupplyDemandService {
 		String n = norm(c);
 		if (n.equals("corn")) return "CORN";
 		if (n.equals("wheat")) return "WHEAT";
-		if (n.contains("soybean") && !n.contains("meal") && !n.contains("oil")) return "SOYBEANS";
+		// Soybean appears three ways: the oilseed itself ("Oilseed, Soybean") and its
+		// two crush products, each published under two names (US table + World table):
+		//   meal → "Meal, Soybean" / "Soybean Meal"
+		//   oil  → "Oil, Soybean"  / "Soybean Oil"
+		// Note "oilseed" contains "oil", so check the oil-product spellings explicitly.
+		if (n.contains("soybean")) {
+			if (n.contains("meal")) return "SOYBEAN_MEAL";
+			if (n.contains("oilsoybean") || n.contains("soybeanoil")) return "SOYBEAN_OIL";
+			return "SOYBEANS";
+		}
 		return null;
 	}
 
@@ -361,10 +458,15 @@ public class SupplyDemandService {
 		return s == null ? "" : s.toLowerCase().replaceAll("[^a-z0-9]", "");
 	}
 
-	/** True for metric units (1000 MT, Million Metric Tons, MT/HA, Hectares). */
+	/**
+	 * True for the metric World-table units we hide from the U.S. (native-unit) view —
+	 * Million/1000 Metric Tons, MT/HA, Hectares. Short tons and pounds are the native
+	 * U.S. units for soybean meal / oil, so they are explicitly kept.
+	 */
 	private static boolean isMetric(String unit) {
 		String n = norm(unit);
-		return n.contains("ton") || n.contains("hectare") || n.contains("mt");
+		if (n.contains("shortton") || n.contains("pound")) return false;
+		return n.contains("metricton") || n.contains("tonne") || n.contains("hectare") || n.contains("mt");
 	}
 
 	private static String get(List<String> f, int i) {

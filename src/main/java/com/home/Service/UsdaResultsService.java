@@ -136,9 +136,6 @@ public class UsdaResultsService {
 
 	private List<Map<String, Object>> topIndividuals(Collection<YieldGuess> guesses, double usda) {
 		return guesses.stream()
-			// "Cowardly" guesses still count in the group/state aggregates, but we
-			// don't expose them by name on the individual leaderboard.
-			.filter(g -> !Boolean.FALSE.equals(g.getShared()))
 			.map(g -> {
 				Map<String, Object> m = new LinkedHashMap<>();
 				m.put("name", (g.getName() == null || g.getName().isBlank()) ? "Anonymous" : g.getName().trim());

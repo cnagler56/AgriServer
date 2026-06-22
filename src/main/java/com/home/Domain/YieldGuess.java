@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -52,18 +53,18 @@ public class YieldGuess {
 	private LocalDateTime date;
 
 	/**
-	 * Whether this guess is shown in the public Community Guesses list. A
-	 * "cowardly" submit sets this false — the guess still counts toward the
-	 * contest results, it's just hidden from the public roster.
+	 * Optional explanation the user attaches when they revise their estimate
+	 * ("USDA bumped Iowa", etc.). Shown in the public change log. Null/blank
+	 * on a first submit or when they don't bother to add one.
 	 */
 	@JsonProperty
-	private Boolean shared;
+	@Column(length = 280)
+	private String note;
 
 	@PrePersist
 	void onCreate() {
 		if (date == null) date = LocalDateTime.now();
 		if (year == null) year = java.time.Year.now().getValue();
-		if (shared == null) shared = Boolean.TRUE;
 	}
 
 	public Long getId() { return id; }
@@ -93,6 +94,6 @@ public class YieldGuess {
 	public LocalDateTime getDate() { return date; }
 	public void setDate(LocalDateTime date) { this.date = date; }
 
-	public Boolean getShared() { return shared; }
-	public void setShared(Boolean shared) { this.shared = shared; }
+	public String getNote() { return note; }
+	public void setNote(String note) { this.note = note; }
 }

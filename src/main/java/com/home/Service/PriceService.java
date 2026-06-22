@@ -59,11 +59,14 @@ public class PriceService {
 	 * than grains), this field is the single knob to change.
 	 */
 	private static final CommodityConfig[] CATALOG = new CommodityConfig[] {
-		new CommodityConfig("ZC", "Corn",        "¢/bu", "CBT", new int[] {3, 5, 7, 9, 12},                1),
-		new CommodityConfig("ZS", "Soybeans",    "¢/bu", "CBT", new int[] {1, 3, 5, 7, 8, 9, 11},          1),
-		new CommodityConfig("ZW", "Wheat",       "¢/bu", "CBT", new int[] {3, 5, 7, 9, 12},                1),
-		new CommodityConfig("LE", "Live Cattle", "¢/lb", "CME", new int[] {2, 4, 6, 8, 10, 12},            1),
-		new CommodityConfig("HE", "Lean Hogs",   "¢/lb", "CME", new int[] {2, 4, 5, 6, 7, 8, 10, 12},      1),
+		new CommodityConfig("ZC", "Corn",         "¢/bu",  "CBT", new int[] {3, 5, 7, 9, 12},               1),
+		new CommodityConfig("ZS", "Soybeans",     "¢/bu",  "CBT", new int[] {1, 3, 5, 7, 8, 9, 11},         1),
+		new CommodityConfig("ZM", "Soybean Meal", "$/ton", "CBT", new int[] {1, 3, 5, 7, 8, 9, 10, 12},     1),
+		new CommodityConfig("ZL", "Soybean Oil",  "¢/lb",  "CBT", new int[] {1, 3, 5, 7, 8, 9, 10, 12},     1),
+		new CommodityConfig("ZW", "Wheat",        "¢/bu",  "CBT", new int[] {3, 5, 7, 9, 12},               1),
+		new CommodityConfig("LE", "Live Cattle",   "¢/lb", "CME", new int[] {2, 4, 6, 8, 10, 12},          1),
+		new CommodityConfig("GF", "Feeder Cattle", "¢/lb", "CME", new int[] {1, 3, 4, 5, 8, 9, 10, 11},    1),
+		new CommodityConfig("HE", "Lean Hogs",     "¢/lb", "CME", new int[] {2, 4, 5, 6, 7, 8, 10, 12},    1),
 	};
 
 	/** Yahoo / CME month codes — index 0 = January. */
