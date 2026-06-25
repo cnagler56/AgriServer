@@ -51,7 +51,7 @@ public class SupplyDemandService {
 	private static final int STALE_DAYS = 20;
 
 	/** Display key per commodity. */
-	private static final String[] COMMODITIES = { "CORN", "SOYBEANS", "WHEAT", "SOYBEAN_MEAL", "SOYBEAN_OIL" };
+	private static final String[] COMMODITIES = { "CORN", "SOYBEANS", "WHEAT", "SOYBEAN_MEAL", "SOYBEAN_OIL", "COTTON" };
 
 	private final RestTemplate restTemplate;
 	private final SupplyDemandRepository repo;
@@ -78,9 +78,9 @@ public class SupplyDemandService {
 	public void prewarm() {
 		new Thread(() -> {
 			try {
-				// Re-ingest if the cache is empty/stale, untagged, or missing a commodity
-				// (the last covers newly-added commodities like soybean meal/oil).
-				boolean missing = false;
+				// Re-ingest if the cache is empty/stale/untagged, missing a commodity
+				// (newly-added meal/oil), or missing the South America regions.
+				boolean missing = !repo.existsByCommodityAndRegion("SOYBEANS", "BRAZIL");
 				for (String c : COMMODITIES) if (repo.countByCommodity(c) == 0) { missing = true; break; }
 				if (repo.count() == 0 || isStale() || repo.existsByMonthIsNull() || missing) ingestAll();
 			} catch (Exception e) {
@@ -321,8 +321,7 @@ public class SupplyDemandService {
 		out.put("commodity", commodity);
 		if (rows.isEmpty()) {
 			out.put("years", List.of());
-			out.put("us", List.of());
-			out.put("world", List.of());
+			out.put("regions", Map.of());
 			out.put("message", "WASDE data isn't loaded yet.");
 			return out;
 		}
@@ -356,8 +355,22 @@ public class SupplyDemandService {
 		out.put("reportDate", reportDate);
 		out.put("prevReportDate", prev.isEmpty() ? null : prev.get(0).getReportDate());
 		out.put("updatedAt", updated == null ? null : updated.toString());
-		out.put("us", buildRegion(current, prev, "US", years, newestYear));
-		out.put("world", buildRegion(current, prev, "WORLD", years, newestYear));
+
+		// One balance sheet per region we recognize; only include those with data
+		// (e.g. corn has Brazil/Argentina, soybeans adds Paraguay, meal/oil neither).
+		Map<String, Object> regions = new LinkedHashMap<>();
+		for (String reg : new String[] { "US", "WORLD", "BRAZIL", "ARGENTINA", "PARAGUAY" }) {
+			List<Map<String, Object>> regionRows = buildRegion(current, prev, reg, years, newestYear);
+			if (!regionRows.isEmpty()) regions.put(reg, regionRows);
+		}
+		// Combined "All South America" total when 2+ SA countries are present.
+		List<String> saKeys = new ArrayList<>();
+		for (String k : new String[] { "BRAZIL", "ARGENTINA", "PARAGUAY" }) if (regions.containsKey(k)) saKeys.add(k);
+		if (saKeys.size() >= 2) {
+			List<Map<String, Object>> agg = buildRegionAggregate(current, prev, saKeys, years, newestYear);
+			if (!agg.isEmpty()) regions.put("SOUTH_AMERICA", agg);
+		}
+		out.put("regions", regions);
 		return out;
 	}
 
@@ -399,6 +412,52 @@ public class SupplyDemandService {
 		return list;
 	}
 
+	/**
+	 * Combined balance sheet that sums several regions into one (e.g. "All South
+	 * America" = Brazil + Argentina + Paraguay). Only additive quantities are
+	 * totaled — per-acre yield and prices can't be summed, so they're dropped.
+	 */
+	private List<Map<String, Object>> buildRegionAggregate(List<SupplyDemand> current, List<SupplyDemand> prev,
+			List<String> regionKeys, List<Integer> years, int newestYear) {
+		Map<String, Double> prevByAttr = new HashMap<>();
+		for (SupplyDemand r : prev) {
+			if (!regionKeys.contains(r.getRegion()) || !isAdditive(r.getUnit()) || r.getValue() == null) continue;
+			if (r.getMarketYear() != null && r.getMarketYear() == newestYear) prevByAttr.merge(r.getAttribute(), r.getValue(), Double::sum);
+		}
+
+		Map<String, Map<String, Object>> byAttr = new LinkedHashMap<>();
+		for (SupplyDemand r : current) {
+			if (!regionKeys.contains(r.getRegion()) || !isAdditive(r.getUnit())) continue;
+			Map<String, Object> a = byAttr.computeIfAbsent(r.getAttribute(), k -> {
+				Map<String, Object> m = new LinkedHashMap<>();
+				m.put("attribute", r.getAttribute());
+				m.put("unit", r.getUnit());
+				m.put("seq", r.getSeq());
+				m.put("values", new ArrayList<Double>(java.util.Collections.nCopies(years.size(), null)));
+				m.put("prev", prevByAttr.get(r.getAttribute()));
+				return m;
+			});
+			int idx = years.indexOf(r.getMarketYear());
+			if (idx >= 0 && r.getValue() != null) {
+				@SuppressWarnings("unchecked")
+				List<Double> vals = (List<Double>) a.get("values");
+				Double cur = vals.get(idx);
+				vals.set(idx, (cur == null ? 0.0 : cur) + r.getValue());
+			}
+		}
+		List<Map<String, Object>> list = new ArrayList<>(byAttr.values());
+		list.sort((x, y) -> Integer.compare((int) x.get("seq"), (int) y.get("seq")));
+		return list;
+	}
+
+	/** Additive quantity unit (tons, hectares) vs. a rate/price (MT/HA, $/bu, %). */
+	private static boolean isAdditive(String unit) {
+		String u = unit == null ? "" : unit.toLowerCase();
+		if (u.isBlank()) return false;
+		return !(u.contains("/") || u.contains(" per ") || u.startsWith("$")
+			|| u.contains("percent") || u.contains("dollar") || u.contains("cent"));
+	}
+
 	/* ── CSV + value helpers ────────────────────────────────────────────── */
 
 	/** Find a column by normalized header name (exact first, then contains). */
@@ -430,6 +489,7 @@ public class SupplyDemandService {
 			if (n.contains("oilsoybean") || n.contains("soybeanoil")) return "SOYBEAN_OIL";
 			return "SOYBEANS";
 		}
+		if (n.contains("cotton")) return "COTTON";   // WASDE: "Cotton" (million 480-lb bales)
 		return null;
 	}
 
@@ -437,6 +497,9 @@ public class SupplyDemandService {
 		String n = norm(r);
 		if (n.equals("unitedstates") || n.equals("us")) return "US";
 		if (n.equals("world")) return "WORLD";
+		if (n.equals("argentina")) return "ARGENTINA";
+		if (n.equals("brazil")) return "BRAZIL";
+		if (n.equals("paraguay")) return "PARAGUAY";
 		return null;
 	}
 

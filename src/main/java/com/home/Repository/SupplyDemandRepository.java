@@ -24,4 +24,11 @@ public interface SupplyDemandRepository extends JpaRepository<SupplyDemand, Long
 
 	/** True if any cached row predates monthly-snapshot tagging — triggers a re-ingest. */
 	boolean existsByMonthIsNull();
+
+	/**
+	 * Canary for the South America backfill: soybeans is the last commodity to gain
+	 * SA regions, so if SOYBEANS/BRAZIL is absent we know the SA ingest hasn't run.
+	 * (Checking a bare region was insufficient — corn could satisfy it on its own.)
+	 */
+	boolean existsByCommodityAndRegion(String commodity, String region);
 }

@@ -64,6 +64,7 @@ public class PriceService {
 		new CommodityConfig("ZM", "Soybean Meal", "$/ton", "CBT", new int[] {1, 3, 5, 7, 8, 9, 10, 12},     1),
 		new CommodityConfig("ZL", "Soybean Oil",  "¢/lb",  "CBT", new int[] {1, 3, 5, 7, 8, 9, 10, 12},     1),
 		new CommodityConfig("ZW", "Wheat",        "¢/bu",  "CBT", new int[] {3, 5, 7, 9, 12},               1),
+		new CommodityConfig("CT", "Cotton",       "¢/lb",  "NYB", new int[] {3, 5, 7, 10, 12},              1),
 		new CommodityConfig("LE", "Live Cattle",   "¢/lb", "CME", new int[] {2, 4, 6, 8, 10, 12},          1),
 		new CommodityConfig("GF", "Feeder Cattle", "¢/lb", "CME", new int[] {1, 3, 4, 5, 8, 9, 10, 11},    1),
 		new CommodityConfig("HE", "Lean Hogs",     "¢/lb", "CME", new int[] {2, 4, 5, 6, 7, 8, 10, 12},    1),

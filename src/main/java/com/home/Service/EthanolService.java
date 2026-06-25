@@ -1,5 +1,6 @@
 package com.home.Service;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -37,6 +38,9 @@ public class EthanolService {
 	private static final String BASE = "https://api.eia.gov/v2/seriesid/";
 	private static final String PRODUCTION_SERIES = "PET.W_EPOOXE_YOP_NUS_MBBLD.W";
 	private static final String STOCKS_SERIES     = "PET.W_EPOOXE_SAE_NUS_MBBL.W";
+	// Finished motor gasoline "product supplied" = the EIA proxy for U.S. gasoline
+	// demand; the demand side of the ethanol-blend (and thus corn) story.
+	private static final String GASOLINE_SERIES   = "PET.WGFUPUS2.W";
 	private static final int WEEKS = 52;
 
 	// Corn → ethanol conversion (industry rules of thumb).
@@ -50,6 +54,9 @@ public class EthanolService {
 
 	private volatile List<Point> production = List.of();  // oldest → newest, MBBL/D
 	private volatile List<Point> stocks     = List.of();  // oldest → newest, MBBL
+	private volatile List<Point> gasoline   = List.of();  // oldest → newest, MBBL/D (demand)
+	private volatile Double ethanolSpot;                   // CME Chicago ethanol front, $/gal
+	private volatile String ethanolSpotAsOf;
 	private volatile LocalDateTime updatedAt;
 
 	public EthanolService(RestTemplate restTemplate) {
@@ -81,21 +88,47 @@ public class EthanolService {
 	/* ── load + parse ───────────────────────────────────────────────────── */
 
 	public void refresh() {
+		fetchEthanolSpot();   // CME ethanol futures (Yahoo) — independent of the EIA key
 		if (apiKey == null || apiKey.isBlank()) {
 			System.err.println("[ETHANOL] EIA_API_KEY not set — skipping fetch");
 			return;
 		}
 		List<Point> prod = fetchSeries(PRODUCTION_SERIES);
 		List<Point> stk  = fetchSeries(STOCKS_SERIES);
+		List<Point> gas  = fetchSeries(GASOLINE_SERIES);
 		if (prod.isEmpty() && stk.isEmpty()) {
 			System.err.println("[ETHANOL] fetched 0 rows — check the API key / series ids");
 			return;
 		}
 		production = prod;
 		stocks = stk;
+		gasoline = gas;
 		updatedAt = LocalDateTime.now();
 		System.out.println("[ETHANOL] cached " + prod.size() + " production + " + stk.size()
-			+ " stocks weeks (latest " + (prod.isEmpty() ? "?" : prod.get(prod.size() - 1).period()) + ")");
+			+ " stocks + " + gas.size() + " gasoline weeks (latest "
+			+ (prod.isEmpty() ? "?" : prod.get(prod.size() - 1).period()) + ")");
+	}
+
+	/** CME Chicago ethanol front-month price (EH=F) from Yahoo, in $/gal. */
+	@SuppressWarnings("unchecked")
+	private void fetchEthanolSpot() {
+		try {
+			String url = "https://query1.finance.yahoo.com/v8/finance/chart/EH=F";
+			HttpHeaders h = new HttpHeaders();
+			h.set("User-Agent", "just4ag/1.0 (ethanol margin)");
+			ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(h), Map.class);
+			Map<String, Object> chart = resp.getBody() == null ? null : (Map<String, Object>) resp.getBody().get("chart");
+			List<Map<String, Object>> results = chart == null ? null : (List<Map<String, Object>>) chart.get("result");
+			if (results == null || results.isEmpty()) return;
+			Map<String, Object> meta = (Map<String, Object>) results.get(0).get("meta");
+			if (meta == null) return;
+			Double price = num(meta.get("regularMarketPrice"));
+			if (price != null) ethanolSpot = price;
+			Object time = meta.get("regularMarketTime");
+			if (time instanceof Number) ethanolSpotAsOf = Instant.ofEpochSecond(((Number) time).longValue()).toString();
+		} catch (Exception e) {
+			System.err.println("[ETHANOL] spot fetch failed: " + e.getClass().getSimpleName() + " " + e.getMessage());
+		}
 	}
 
 	@SuppressWarnings("unchecked")
@@ -145,8 +178,10 @@ public class EthanolService {
 
 		out.put("productionUnit", "MBBL/D");
 		out.put("stocksUnit", "MBBL");
+		out.put("gasolineUnit", "MBBL/D");
 		out.put("production", tail(production));
 		out.put("stocks", tail(stocks));
+		out.put("gasoline", tail(gasoline));
 
 		Double prodLatest = last(production);
 		Double prodPrev   = prev(production);
@@ -155,6 +190,25 @@ public class EthanolService {
 		out.put("productionAsOf", production.isEmpty() ? null : production.get(production.size() - 1).period());
 		out.put("stocksLatest", last(stocks));
 		out.put("stocksAsOf", stocks.isEmpty() ? null : stocks.get(stocks.size() - 1).period());
+
+		// Gasoline demand (the blend-demand side of corn ethanol).
+		Double gasLatest = last(gasoline);
+		Double gasPrev   = prev(gasoline);
+		Double gasYearAgo = yearAgo(gasoline);
+		out.put("gasolineLatest", gasLatest);
+		out.put("gasolineWoW", (gasLatest != null && gasPrev != null) ? round(gasLatest - gasPrev, 1) : null);
+		out.put("gasolineYoYPct", (gasLatest != null && gasYearAgo != null && gasYearAgo != 0)
+			? round((gasLatest - gasYearAgo) / gasYearAgo * 100, 1) : null);
+		out.put("gasolineAsOf", gasoline.isEmpty() ? null : gasoline.get(gasoline.size() - 1).period());
+		// Implied ethanol blend share: fuel-ethanol production ÷ gasoline supplied.
+		if (prodLatest != null && gasLatest != null && gasLatest != 0) {
+			out.put("impliedBlendPct", round(prodLatest / gasLatest * 100, 1));
+		}
+
+		// CME ethanol front price for the corn-ethanol margin.
+		out.put("ethanolSpotPrice", ethanolSpot);
+		out.put("ethanolSpotUnit", "$/gal");
+		out.put("ethanolSpotAsOf", ethanolSpotAsOf);
 
 		// Implied corn grind from the latest weekly production rate.
 		if (prodLatest != null) {
@@ -180,6 +234,8 @@ public class EthanolService {
 
 	private static Double last(List<Point> p) { return p.isEmpty() ? null : p.get(p.size() - 1).value(); }
 	private static Double prev(List<Point> p) { return p.size() < 2 ? null : p.get(p.size() - 2).value(); }
+	/** Value ~52 weeks back for a year-over-year comparison. */
+	private static Double yearAgo(List<Point> p) { return p.size() < 53 ? null : p.get(p.size() - 53).value(); }
 
 	private static Double num(Object o) {
 		if (o == null) return null;
