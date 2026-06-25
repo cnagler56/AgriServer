@@ -283,6 +283,7 @@ public class UsdaReportsService {
 		LocalDateTime now = LocalDateTime.now();
 		for (ApiItem item : resp.getData()) {
 			if (!isGrainRow(item.getShortDesc())) continue;
+			if (!isAggregateClass(commodity, item.getShortDesc())) continue;
 			String state = item.getState();
 			String refPeriod = normalizeRefPeriod(item.getReferencePeriodDesc());
 			Double yieldBu = parseDouble(item.getYield());
@@ -333,6 +334,7 @@ public class UsdaReportsService {
 		Map<String, Integer> latestRank    = new HashMap<>();  // STATE → rank of latest
 		for (ApiItem item : resp.getData()) {
 			if (!isGrainRow(item.getShortDesc())) continue;
+			if (!isAggregateClass(commodity, item.getShortDesc())) continue;
 			// Same guard as planting: drop PCT-breakdown rows so the harvested-acre
 			// weighting for the national yield is real acres, not a percentage.
 			if (!isAcresRow(item.getUnitDesc())) continue;
@@ -411,6 +413,70 @@ public class UsdaReportsService {
 		out.put("currentPlantings", new ArrayList<>(latest.values()));
 		out.put("priorYearPlantings", new ArrayList<>(priorLatest.values()));
 		return out;
+	}
+
+	/**
+	 * Simple planted-acres lookup for ANY year — backs the /usda-reports planting
+	 * search (pick crop + year → planted acres by state). Live NASS fetch (not
+	 * persisted), returning the chosen year and the prior year for a YoY column.
+	 */
+	public Map<String, Object> getPlantingByYear(String commodity, int year) {
+		commodity = commodity.toUpperCase();
+		Map<String, Object> out = new HashMap<>();
+		out.put("commodity", commodity);
+		out.put("year", year);
+		out.put("priorYear", year - 1);
+		out.put("plantings", fetchPlantedAcresLive(commodity, year));
+		out.put("priorYearPlantings", fetchPlantedAcresLive(commodity, year - 1));
+		return out;
+	}
+
+	/** State-level headline planted acres for one commodity/year (live, not cached). */
+	private List<Map<String, Object>> fetchPlantedAcresLive(String commodity, int year) {
+		List<Map<String, Object>> out = new ArrayList<>();
+		URI uri = UriComponentsBuilder.fromHttpUrl(NASS_URL)
+			.queryParam("key", apiKey)
+			.queryParam("commodity_desc", commodity)
+			.queryParam("statisticcat_desc", "AREA PLANTED")
+			.queryParam("agg_level_desc", "STATE")
+			.queryParam("source_desc", "SURVEY")
+			.queryParam("reference_period_desc", "YEAR")
+			.queryParam("year", year)
+			.build().encode().toUri();
+		try {
+			ApiResponse resp = restTemplate.getForObject(uri, ApiResponse.class);
+			if (resp == null || resp.getData() == null) return out;
+			Map<String, Long> byState = new HashMap<>();
+			for (ApiItem item : resp.getData()) {
+				// Keep only real acres and the headline total (class prefix == the
+				// commodity), dropping PCT breakdowns and irrigated/non-irrigated splits.
+				if (!isAcresRow(item.getUnitDesc())) continue;
+				if (!classPrefixEquals(item.getShortDesc(), commodity)) continue;
+				String state = item.getState();
+				Long acres = parseAcres(item.getYield());
+				if (state == null || acres == null) continue;
+				byState.merge(state, acres, Math::max);
+			}
+			byState.forEach((s, a) -> {
+				Map<String, Object> m = new HashMap<>();
+				m.put("state", s);
+				m.put("acres", a);
+				out.add(m);
+			});
+			out.sort((a, b) -> Long.compare((Long) b.get("acres"), (Long) a.get("acres")));
+		} catch (Exception e) {
+			System.err.println("[USDA REPORTS] planting search " + commodity + " " + year
+				+ " failed: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+		}
+		return out;
+	}
+
+	/** True when the short_desc's class prefix (before " - ") equals the commodity exactly. */
+	private static boolean classPrefixEquals(String shortDesc, String commodity) {
+		if (shortDesc == null) return false;
+		int idx = shortDesc.indexOf(" - ");
+		String prefix = (idx == -1 ? shortDesc : shortDesc.substring(0, idx)).trim();
+		return prefix.equalsIgnoreCase(commodity);
 	}
 
 	private void refreshPlantingIfStale(String commodity, int currentYear, int priorYear) {
@@ -516,6 +582,19 @@ public class UsdaReportsService {
 	}
 
 	// ── SHARED HELPERS ────────────────────────────────────────────────────────
+
+	/**
+	 * Cotton's NASS YIELD / AREA HARVESTED come as an all-cotton aggregate
+	 * ("COTTON - …") AND Upland/Pima sub-classes ("COTTON, UPLAND - …"). Including
+	 * all three would double-count in the production-weighted national average, so
+	 * for cotton we keep only the aggregate. Other commodities are unaffected.
+	 */
+	private static boolean isAggregateClass(String commodity, String shortDesc) {
+		if (!"COTTON".equalsIgnoreCase(commodity)) return true;
+		if (shortDesc == null) return false;
+		String prefix = shortDesc.split(" - ")[0].trim();
+		return prefix.equalsIgnoreCase("COTTON");
+	}
 
 	/** Skip non-grain rows (silage, sweet corn, soy oil, etc) — we want the headline grain numbers. */
 	private static boolean isGrainRow(String shortDesc) {

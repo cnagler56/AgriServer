@@ -32,4 +32,10 @@ public class UsdaReportsController {
 	public Map<String, Object> planting(@PathVariable String commodity) {
 		return service.getPlantingData(commodity);
 	}
+
+	/** /api/usda-reports/planting/CORN/2020 — planted acres by state for a chosen year (+ prior). */
+	@GetMapping("/planting/{commodity}/{year}")
+	public Map<String, Object> plantingByYear(@PathVariable String commodity, @PathVariable int year) {
+		return service.getPlantingByYear(commodity, year);
+	}
 }

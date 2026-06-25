@@ -38,15 +38,23 @@ public class NewsService {
 	private final SupplyDemandService supplyDemandService;
 	private final PriceService priceService;
 	private final CotService cotService;
+	private final BroilerService broilerService;
+	private final ExportSalesService exportSalesService;
+	private final GrainStocksService grainStocksService;
 
 	public NewsService(NewsItemRepository repo, EthanolService ethanolService, EnsoService ensoService,
-			SupplyDemandService supplyDemandService, PriceService priceService, CotService cotService) {
+			SupplyDemandService supplyDemandService, PriceService priceService, CotService cotService,
+			BroilerService broilerService, ExportSalesService exportSalesService,
+			GrainStocksService grainStocksService) {
 		this.repo = repo;
 		this.ethanolService = ethanolService;
 		this.ensoService = ensoService;
 		this.supplyDemandService = supplyDemandService;
 		this.priceService = priceService;
 		this.cotService = cotService;
+		this.broilerService = broilerService;
+		this.exportSalesService = exportSalesService;
+		this.grainStocksService = grainStocksService;
 	}
 
 	/** Page name per priced commodity, for the item link. */
@@ -84,10 +92,14 @@ public class NewsService {
 
 	public void generate() {
 		ethanolItem();
+		gasolineItem();
 		ensoItem();
 		wasdeItem();
 		priceItem();
 		cotItem();
+		broilerItem();
+		exportSalesItem();
+		grainStocksItem();
 	}
 
 	private void save(String key, String category, String icon, String headline, String detail,
@@ -128,6 +140,25 @@ public class NewsService {
 				detail, "/ethanol", shortDate(asOf));
 		} catch (Exception ex) {
 			System.err.println("[NEWS] ethanol item failed: " + ex.getMessage());
+		}
+	}
+
+	private void gasolineItem() {
+		try {
+			Map<String, Object> e = ethanolService.getEthanol();
+			Double latest = dbl(e.get("gasolineLatest"));
+			String asOf = str(e.get("gasolineAsOf"));
+			if (latest == null || asOf == null) return;
+			Double wow = dbl(e.get("gasolineWoW"));
+			Double yoy = dbl(e.get("gasolineYoYPct"));
+			String move = wow == null || wow == 0 ? ""
+				: ", " + (wow > 0 ? "up " : "down ") + fmt(Math.abs(wow)) + "k b/d w/w";
+			String detail = yoy == null ? null : "Year-over-year " + signed(yoy) + "% · ethanol-blend demand";
+			save("GASDEM|" + asOf, "ENERGY", "🚗",
+				"EIA: U.S. gasoline demand " + fmt(latest / 1000.0) + "M bbl/day" + move,
+				detail, "/ethanol", shortDate(asOf));
+		} catch (Exception ex) {
+			System.err.println("[NEWS] gasoline item failed: " + ex.getMessage());
 		}
 	}
 
@@ -226,6 +257,73 @@ public class NewsService {
 			System.err.println("[NEWS] cot item failed: " + ex.getMessage());
 		}
 	}
+
+	private void broilerItem() {
+		try {
+			Map<String, Object> b = broilerService.getLatest();
+			String weekEnding = str(b.get("weekEnding"));
+			Double head = dbl(b.get("placements"));
+			if (weekEnding == null || head == null) return;
+			Double wow = dbl(b.get("wowPct"));
+			Double yoy = dbl(b.get("yoyPct"));
+			String move = wow == null || wow == 0 ? ""
+				: ", " + (wow > 0 ? "up " : "down ") + fmt(Math.abs(wow)) + "% w/w";
+			String detail = yoy == null ? null : "Year-over-year " + signed(yoy) + "%";
+			save("BROILER|" + weekEnding, "POULTRY", "🐔",
+				"USDA: broiler chicks placed " + fmt(head / 1_000_000.0) + "M head" + move,
+				detail, null, shortDate(weekEnding));
+		} catch (Exception ex) {
+			System.err.println("[NEWS] broiler item failed: " + ex.getMessage());
+		}
+	}
+
+	/** Weekly FAS export sales — combined corn / soybeans / wheat net sales. */
+	private void exportSalesItem() {
+		try {
+			Map<String, Object> corn = exportSalesService.getExportSales("CORN");
+			String week = str(corn.get("weekEnding"));
+			if (week == null) return;
+			Double cornNet = dbl(corn.get("netSales"));
+			Double soyNet = dbl(exportSalesService.getExportSales("SOYBEANS").get("netSales"));
+			Double wheatNet = dbl(exportSalesService.getExportSales("WHEAT").get("netSales"));
+			if (cornNet == null && soyNet == null) return;
+			String headline = "FAS export sales"
+				+ (cornNet != null ? ": corn " + mmt(cornNet) : "")
+				+ (soyNet != null ? ", soybeans " + mmt(soyNet) : "")
+				+ (wheatNet != null ? ", wheat " + mmt(wheatNet) : "");
+			save("ESR|" + week, "EXPORTS", "🚢", headline,
+				"Net new sales for the week", "/corn", shortDate(week));
+		} catch (Exception ex) {
+			System.err.println("[NEWS] export sales item failed: " + ex.getMessage());
+		}
+	}
+
+	/** Quarterly NASS Grain Stocks — combined corn / soybeans / wheat totals. */
+	private void grainStocksItem() {
+		try {
+			Map<String, Object> corn = grainStocksService.getStocks("CORN");
+			String period = str(corn.get("period"));
+			Double cornTot = dbl(corn.get("total"));
+			if (period == null || cornTot == null) return;
+			Double soyTot = dbl(grainStocksService.getStocks("SOYBEANS").get("total"));
+			Double wheatTot = dbl(grainStocksService.getStocks("WHEAT").get("total"));
+			Double cornYoy = dbl(corn.get("yoyPct"));
+			String headline = "NASS Grain Stocks (" + period + "): corn " + bil(cornTot) + " bil bu"
+				+ (cornYoy != null ? " (" + signed(cornYoy) + "% YoY)" : "");
+			StringBuilder detail = new StringBuilder();
+			if (soyTot != null) detail.append("Soybeans ").append(bil(soyTot)).append(" bil bu");
+			if (wheatTot != null) detail.append(detail.length() > 0 ? " · " : "").append("Wheat ").append(bil(wheatTot)).append(" bil bu");
+			save("STOCKS|" + period, "STOCKS", "📦", headline,
+				detail.length() > 0 ? detail.toString() : null, "/corn", period);
+		} catch (Exception ex) {
+			System.err.println("[NEWS] grain stocks item failed: " + ex.getMessage());
+		}
+	}
+
+	/** Metric tons → "1.16 MMT". */
+	private static String mmt(double mt) { return (Math.round(mt / 1_000.0) / 1_000.0) + " MMT"; }
+	/** Bushels → "9.0". */
+	private static String bil(double bu) { return String.valueOf(Math.round(bu / 1e9 * 10) / 10.0); }
 
 	private static String stance(long net) {
 		return net > 0 ? "net-long" : net < 0 ? "net-short" : "flat";
