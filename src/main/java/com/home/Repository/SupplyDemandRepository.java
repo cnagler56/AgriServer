@@ -3,6 +3,7 @@ package com.home.Repository;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,4 +32,8 @@ public interface SupplyDemandRepository extends JpaRepository<SupplyDemand, Long
 	 * (Checking a bare region was insufficient — corn could satisfy it on its own.)
 	 */
 	boolean existsByCommodityAndRegion(String commodity, String region);
+
+	/** Distinct monthly snapshots currently loaded (newest first) — for the admin status view. */
+	@Query("SELECT DISTINCT s.month FROM SupplyDemand s WHERE s.month IS NOT NULL ORDER BY s.month DESC")
+	List<Integer> findDistinctMonths();
 }

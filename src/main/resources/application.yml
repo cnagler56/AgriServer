@@ -18,6 +18,11 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:root}}
     password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:}}
 
+  servlet:
+    multipart:
+      max-file-size: 8MB      # WASDE CSVs run ~1 MB; headroom for admin upload
+      max-request-size: 10MB
+
   jpa:
     show-sql: ${JPA_SHOW_SQL:false}
     generate-ddl: true
