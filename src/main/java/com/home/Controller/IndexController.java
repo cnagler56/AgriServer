@@ -1,5 +1,6 @@
 package com.home.Controller;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +35,17 @@ public class IndexController {
     private final UserService userService;
     private final PostService postService;
     private final SessionService sessionService;
+
+    /**
+     * Cookie attributes. Local dev (same-site, http) uses the defaults below.
+     * Cross-site prod (Vercel frontend ↔ Railway backend over HTTPS) needs
+     * SameSite=None + Secure=true, set via env: APP_COOKIE_SAMESITE=None,
+     * APP_COOKIE_SECURE=true.
+     */
+    @Value("${APP_COOKIE_SAMESITE:Lax}")
+    private String cookieSameSite;
+    @Value("${APP_COOKIE_SECURE:false}")
+    private boolean cookieSecure;
 
     public IndexController(UserService userService, PostService postService, SessionService sessionService) {
         this.userService = userService;
@@ -106,8 +118,8 @@ public class IndexController {
         String token = sessionService.createSession(user.getUserId());
         ResponseCookie cookie = ResponseCookie.from(SessionService.COOKIE_NAME, token)
             .httpOnly(true)
-            .secure(false)
-            .sameSite("Lax")
+            .secure(cookieSecure)
+            .sameSite(cookieSameSite)
             .path("/")
             .maxAge(java.time.Duration.ofDays(30))
             .build();
@@ -120,8 +132,8 @@ public class IndexController {
     private ResponseCookie clearedCookie() {
         return ResponseCookie.from(SessionService.COOKIE_NAME, "")
             .httpOnly(true)
-            .secure(false)
-            .sameSite("Lax")
+            .secure(cookieSecure)
+            .sameSite(cookieSameSite)
             .path("/")
             .maxAge(0)
             .build();
