@@ -10,7 +10,11 @@ server:
 
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:${DB_URL:jdbc:mysql://localhost:3306/corn}}
+    # No localhost fallback for the URL: in prod a missing/empty SPRING_DATASOURCE_URL
+    # should fail clearly ("url not specified") rather than silently dialing localhost
+    # and reporting a confusing "connection refused". Local dev uses the root
+    # application.yml (which keeps the localhost default) since it overrides this one.
+    url: ${SPRING_DATASOURCE_URL:${DB_URL:}}
     username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:root}}
     password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:}}
 
