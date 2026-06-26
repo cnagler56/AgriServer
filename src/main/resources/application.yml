@@ -1,0 +1,55 @@
+# Runtime config that is PACKAGED INTO THE JAR (src/main/resources), so it ships
+# with the Docker image Railway builds. It accepts Railway's variable names
+# (SPRING_DATASOURCE_URL/USERNAME/PASSWORD and PORT) and falls back to the local
+# DB_URL/DB_USER/SERVER_PORT names used in development.
+#
+# The root-level application.yml / application-local.yml are still used for local
+# runs (current-directory config overrides the classpath), so dev is unchanged.
+server:
+  port: ${PORT:${SERVER_PORT:8081}}
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:${DB_URL:jdbc:mysql://localhost:3306/corn}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:root}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:}}
+
+  jpa:
+    show-sql: ${JPA_SHOW_SQL:false}
+    generate-ddl: true
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+logging:
+  level:
+    root: warn
+    org.springframework.web: ${LOG_WEB_LEVEL:info}
+    org.hibernate: error
+
+# App
+app:
+  frontend:
+    url: ${APP_FRONTEND_URL:http://localhost:3000}
+  mail:
+    from: ${APP_MAIL_FROM:no-reply@just4ag.local}
+
+# USDA NASS Quick Stats — https://quickstats.nass.usda.gov/api
+usda:
+  api:
+    key: ${USDA_API_KEY:}
