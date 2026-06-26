@@ -30,7 +30,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import com.home.Domain.SupplyDemand;
+import com.home.Domain.WasdeFile;
 import com.home.Repository.SupplyDemandRepository;
+import com.home.Repository.WasdeFileRepository;
 
 /**
  * USDA supply/demand balance sheets — the actual WASDE numbers.
@@ -55,6 +57,7 @@ public class SupplyDemandService {
 
 	private final RestTemplate restTemplate;
 	private final SupplyDemandRepository repo;
+	private final WasdeFileRepository wasdeFileRepo;
 
 	/** Optional hard override of the CSV URL (e.g. pin a specific month/version). */
 	@Value("${WASDE_CSV_URL:}")
@@ -67,9 +70,11 @@ public class SupplyDemandService {
 	@Value("${WASDE_CSV_PATH:}")
 	private String csvPath;
 
-	public SupplyDemandService(RestTemplate restTemplate, SupplyDemandRepository repo) {
+	public SupplyDemandService(RestTemplate restTemplate, SupplyDemandRepository repo,
+			WasdeFileRepository wasdeFileRepo) {
 		this.restTemplate = restTemplate;
 		this.repo = repo;
+		this.wasdeFileRepo = wasdeFileRepo;
 	}
 
 	/* ── Scheduling ─────────────────────────────────────────────────────── */
@@ -127,10 +132,75 @@ public class SupplyDemandService {
 		for (String c : COMMODITIES) {
 			List<SupplyDemand> rows = byCommodity.get(c);
 			if (rows == null || rows.isEmpty()) continue;
+			// De-dupe by (region, attribute, month) keeping the last — so if the same
+			// month appears in more than one source (e.g. a bundled file and an admin
+			// upload), it isn't double-counted.
+			Map<String, SupplyDemand> dedup = new LinkedHashMap<>();
+			for (SupplyDemand r : rows) dedup.put(r.getRegion() + "|" + r.getAttribute() + "|" + r.getMonth(), r);
+			List<SupplyDemand> finalRows = new ArrayList<>(dedup.values());
 			repo.deleteByCommodity(c);
-			repo.saveAll(rows);
-			System.out.println("[WASDE] cached " + rows.size() + " rows for " + c);
+			repo.saveAll(finalRows);
+			System.out.println("[WASDE] cached " + finalRows.size() + " rows for " + c);
 		}
+	}
+
+	/* ── Admin upload ───────────────────────────────────────────────────── */
+
+	/**
+	 * Store an admin-uploaded WASDE CSV in the DB (durable) and re-ingest so the
+	 * new month shows immediately. Validates the content looks like a WASDE file.
+	 */
+	@Transactional
+	public Map<String, Object> uploadAndIngest(String filename, String content) {
+		Map<String, Object> out = new LinkedHashMap<>();
+		if (content == null || content.length() < 100 || !content.toLowerCase().contains("commodity")) {
+			out.put("ok", false);
+			out.put("message", "That doesn't look like a WASDE machine-readable CSV.");
+			return out;
+		}
+		String name = (filename == null || filename.isBlank()) ? "wasde-upload.csv" : filename.trim();
+		if (!name.toLowerCase().contains("wasde")) name = "wasde-" + name;
+
+		WasdeFile wf = wasdeFileRepo.findByFilename(name).orElseGet(WasdeFile::new);
+		wf.setFilename(name);
+		wf.setContent(content);
+		wf.setMonthKey(monthFromName(name));
+		wf.setUploadedAt(LocalDateTime.now());
+		wasdeFileRepo.save(wf);
+
+		ingestAll();
+
+		out.put("ok", true);
+		out.put("filename", name);
+		out.put("monthsLoaded", repo.findDistinctMonths());
+		out.put("uploads", listUploads());
+		return out;
+	}
+
+	/** Months currently loaded + admin uploads on record — for the admin status view. */
+	public Map<String, Object> uploadStatus() {
+		Map<String, Object> out = new LinkedHashMap<>();
+		out.put("monthsLoaded", repo.findDistinctMonths());
+		out.put("uploads", listUploads());
+		return out;
+	}
+
+	private List<Map<String, Object>> listUploads() {
+		List<Map<String, Object>> list = new ArrayList<>();
+		for (WasdeFile wf : wasdeFileRepo.findAll()) {
+			Map<String, Object> m = new LinkedHashMap<>();
+			m.put("filename", wf.getFilename());
+			m.put("monthKey", wf.getMonthKey());
+			m.put("uploadedAt", wf.getUploadedAt() == null ? null : wf.getUploadedAt().toString());
+			list.add(m);
+		}
+		return list;
+	}
+
+	private static Integer monthFromName(String name) {
+		Matcher m = Pattern.compile("(\\d{4})-(\\d{2})").matcher(name);
+		if (m.find()) return Integer.parseInt(m.group(1)) * 100 + Integer.parseInt(m.group(2));
+		return null;
 	}
 
 	/** All WASDE CSVs we can read: every *.csv in the local folder, else a single download. */
@@ -153,13 +223,25 @@ public class SupplyDemandService {
 							out.add(new String(Files.readAllBytes(f), StandardCharsets.ISO_8859_1));
 						}
 					}
-					if (!out.isEmpty()) return out;
 				}
 			} catch (Exception e) {
 				System.err.println("[WASDE] local folder read failed: " + e.getMessage());
 			}
 		}
-		// Single-file path or remote download (no history, but keeps the page populated).
+		// Admin-uploaded CSVs stored in the DB (durable across redeploys). Appended
+		// after bundled files so a re-uploaded month wins the de-dupe.
+		try {
+			for (WasdeFile wf : wasdeFileRepo.findAll()) {
+				if (wf.getContent() != null && !wf.getContent().isBlank()) {
+					System.out.println("[WASDE] reading uploaded file " + wf.getFilename());
+					out.add(wf.getContent());
+				}
+			}
+		} catch (Exception e) {
+			System.err.println("[WASDE] uploaded-file read failed: " + e.getMessage());
+		}
+		if (!out.isEmpty()) return out;
+		// Nothing local/uploaded — fall back to a single remote/pinned download.
 		String one = downloadCsv();
 		if (one != null) out.add(one);
 		return out;
