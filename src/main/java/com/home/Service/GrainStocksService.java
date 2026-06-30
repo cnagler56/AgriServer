@@ -72,17 +72,19 @@ public class GrainStocksService {
     }
 
     /**
-     * Second daily refresh in the early afternoon. Grain Stocks releases at noon
-     * Eastern (11 AM Central) — after the morning run — and its release date moves
-     * each quarter (late Jan / Mar / Jun 30 / late Sep), so rather than hard-code
-     * four shifting report dates we just refresh again at 11:45 AM Central (~45 min
-     * after release). On report days this picks up the new quarter same-day; on
-     * every other day it's a harmless no-op.
+     * Report-release burst. Grain Stocks publishes at noon Eastern (11 AM Central),
+     * after the morning run, and its date moves each quarter (late Jan / Mar / Jun 30
+     * / late Sep) — so instead of hard-coding shifting report days we fire a cluster
+     * of attempts right after release: 12:01, 12:04, 12:08, 12:15, 12:25 ET. The first
+     * lands ~1 minute after release; the later ones cover NASS's ingestion lag (the
+     * data isn't queryable the instant the press release hits). A fetch that comes
+     * back empty just retries on the next tick and never overwrites the last-good value.
+     * Date-agnostic, so it covers all four quarterly reports with no maintenance.
      */
-    @Scheduled(cron = "0 45 11 * * *", zone = "America/Chicago")
-    public void afternoonRefresh() {
+    @Scheduled(cron = "0 1,4,8,15,25 11 * * *", zone = "America/Chicago")
+    public void reportBurstRefresh() {
         try { refresh(); } catch (Exception e) {
-            System.err.println("[STOCKS] afternoon load failed: " + e.getMessage());
+            System.err.println("[STOCKS] burst load failed: " + e.getMessage());
         }
     }
 

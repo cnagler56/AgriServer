@@ -75,8 +75,14 @@ public class ExportSalesService {
         }, "esr-prewarm").start();
     }
 
-    /** ESR releases Thursday ~7:30 CT; a daily fetch keeps us current. */
-    @Scheduled(cron = "0 50 7 * * *", zone = "America/Chicago")
+    /**
+     * Report-release burst. ESR publishes Thursday ~7:30 AM Central (8:30 ET). We
+     * fire a cluster of attempts right after — 7:31, 7:35, 7:42, 7:50 CT: the first
+     * ~1 minute after release, the later ones covering FAS's ingestion lag. A fetch
+     * that comes back empty just retries on the next tick and never overwrites the
+     * last-good value. Runs daily (harmless no-op on non-release days).
+     */
+    @Scheduled(cron = "0 31,35,42,50 7 * * *", zone = "America/Chicago")
     public void scheduledRefresh() {
         try { refresh(); } catch (Exception e) {
             System.err.println("[ESR] scheduled load failed: " + e.getMessage());
