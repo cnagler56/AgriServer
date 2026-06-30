@@ -20,6 +20,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import com.home.Domain.ExportSalesSnapshot;
+import com.home.Repository.ExportSalesSnapshotRepository;
+
 /**
  * USDA FAS weekly Export Sales (ESR) — the Thursday report markets watch closely:
  * net new sales, weekly shipments, and outstanding commitments by commodity, plus
@@ -46,18 +51,23 @@ public class ExportSalesService {
     @Value("${FAS_API_KEY:}")
     private String apiKey;
 
+    private final ExportSalesSnapshotRepository snapshotRepo;
+    private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, Map<String, Object>> cache = new ConcurrentHashMap<>();
     private volatile Map<Integer, String> countryNames = Map.of();
     private volatile LocalDateTime updatedAt;
 
-    public ExportSalesService(RestTemplate restTemplate) {
+    public ExportSalesService(RestTemplate restTemplate, ExportSalesSnapshotRepository snapshotRepo) {
         this.restTemplate = restTemplate;
+        this.snapshotRepo = snapshotRepo;
     }
 
     /* ── scheduling ─────────────────────────────────────────────────────── */
 
     @EventListener(ApplicationReadyEvent.class)
     public void prewarm() {
+        // Serve last-good immediately from the DB, even if FAS is unreachable on boot.
+        loadCacheFromDb();
         new Thread(() -> {
             try { refresh(); } catch (Exception e) {
                 System.err.println("[ESR] startup load failed: " + e.getMessage());
@@ -65,8 +75,14 @@ public class ExportSalesService {
         }, "esr-prewarm").start();
     }
 
-    /** ESR releases Thursday ~7:30 CT; a daily fetch keeps us current. */
-    @Scheduled(cron = "0 50 7 * * *", zone = "America/Chicago")
+    /**
+     * Report-release burst. ESR publishes Thursday ~7:30 AM Central (8:30 ET). We
+     * fire a cluster of attempts right after — 7:31, 7:35, 7:42, 7:50 CT: the first
+     * ~1 minute after release, the later ones covering FAS's ingestion lag. A fetch
+     * that comes back empty just retries on the next tick and never overwrites the
+     * last-good value. Runs daily (harmless no-op on non-release days).
+     */
+    @Scheduled(cron = "0 31,35,42,50 7 * * *", zone = "America/Chicago")
     public void scheduledRefresh() {
         try { refresh(); } catch (Exception e) {
             System.err.println("[ESR] scheduled load failed: " + e.getMessage());
@@ -82,10 +98,49 @@ public class ExportSalesService {
         int ok = 0;
         for (Map.Entry<String, Comm> e : COMMODITIES.entrySet()) {
             Map<String, Object> built = load(e.getKey(), e.getValue());
-            if (built != null) { cache.put(e.getKey(), built); ok++; }
+            // Only overwrite on a successful build — a failed/empty FAS fetch keeps the
+            // last-good cache (and DB row) rather than blanking the panel.
+            if (built != null) { cache.put(e.getKey(), built); persist(e.getKey(), built); ok++; }
         }
         if (ok > 0) updatedAt = LocalDateTime.now();
         System.out.println("[ESR] cached export sales for " + ok + "/" + COMMODITIES.size() + " commodities");
+    }
+
+    /** Upsert a commodity's last-good result into the DB. */
+    private void persist(String commodity, Map<String, Object> built) {
+        try {
+            ExportSalesSnapshot snap = snapshotRepo.findByCommodity(commodity)
+                .orElseGet(ExportSalesSnapshot::new);
+            snap.setCommodity(commodity);
+            snap.setPayloadJson(mapper.writeValueAsString(built));
+            snapshotRepo.save(snap);
+        } catch (Exception e) {
+            System.err.println("[ESR] persist failed for " + commodity + ": " + e.getMessage());
+        }
+    }
+
+    /** Warm the in-memory cache from the persisted last-good rows. */
+    private void loadCacheFromDb() {
+        try {
+            LocalDateTime newest = null;
+            for (ExportSalesSnapshot snap : snapshotRepo.findAll()) {
+                Map<String, Object> built = deserialize(snap.getPayloadJson());
+                if (built == null) continue;
+                cache.put(snap.getCommodity(), built);
+                if (snap.getUpdatedAt() != null && (newest == null || snap.getUpdatedAt().isAfter(newest)))
+                    newest = snap.getUpdatedAt();
+            }
+            if (newest != null) updatedAt = newest;
+        } catch (Exception e) {
+            System.err.println("[ESR] DB warm failed: " + e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> deserialize(String json) {
+        if (json == null || json.isBlank()) return null;
+        try { return mapper.readValue(json, LinkedHashMap.class); }
+        catch (Exception e) { return null; }
     }
 
     /* ── load + parse ───────────────────────────────────────────────────── */
@@ -188,6 +243,16 @@ public class ExportSalesService {
     public Map<String, Object> getExportSales(String commodity) {
         String key = commodity == null ? "" : commodity.toUpperCase();
         Map<String, Object> cached = cache.get(key);
+        if (cached == null) {
+            // Cold cache (e.g. a request lands before prewarm finishes) — fall back to the DB.
+            ExportSalesSnapshot snap = snapshotRepo.findByCommodity(key).orElse(null);
+            Map<String, Object> fromDb = snap == null ? null : deserialize(snap.getPayloadJson());
+            if (fromDb != null) {
+                cache.put(key, fromDb);
+                cached = fromDb;
+                if (updatedAt == null) updatedAt = snap.getUpdatedAt();
+            }
+        }
         if (cached != null) {
             Map<String, Object> out = new LinkedHashMap<>(cached);
             out.put("source", "USDA FAS Export Sales");

@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +18,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import com.home.Domain.GrainStocksSnapshot;
+import com.home.Repository.GrainStocksSnapshotRepository;
 
 /**
  * USDA NASS quarterly Grain Stocks (Jan / Mar / Jun / Sep) — on-farm and off-farm
@@ -36,16 +42,21 @@ public class GrainStocksService {
         "FIRST OF MAR", 1, "FIRST OF JUN", 2, "FIRST OF SEP", 3, "FIRST OF DEC", 4);
 
     private final RestTemplate restTemplate;
+    private final GrainStocksSnapshotRepository snapshotRepo;
+    private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, Map<String, Object>> cache = new ConcurrentHashMap<>();
 
-    public GrainStocksService(RestTemplate restTemplate) {
+    public GrainStocksService(RestTemplate restTemplate, GrainStocksSnapshotRepository snapshotRepo) {
         this.restTemplate = restTemplate;
+        this.snapshotRepo = snapshotRepo;
     }
 
     /* ── scheduling ─────────────────────────────────────────────────────── */
 
     @EventListener(ApplicationReadyEvent.class)
     public void prewarm() {
+        // Serve last-good immediately from the DB, even if USDA is unreachable on boot.
+        loadCacheFromDb();
         new Thread(() -> {
             try { refresh(); } catch (Exception e) {
                 System.err.println("[STOCKS] startup load failed: " + e.getMessage());
@@ -53,6 +64,11 @@ public class GrainStocksService {
         }, "stocks-prewarm").start();
     }
 
+    /**
+     * Daily safety-net refresh (6:35 AM Central). The precise release-day burst is
+     * driven by admin-entered dates in ReportScheduleService; this just ensures the
+     * data is never more than ~a day stale even if a release date wasn't set.
+     */
     @Scheduled(cron = "0 35 6 * * *", zone = "America/Chicago")
     public void scheduledRefresh() {
         try { refresh(); } catch (Exception e) {
@@ -63,8 +79,45 @@ public class GrainStocksService {
     public void refresh() {
         for (String c : COMMODITIES) {
             Map<String, Object> built = load(c);
-            if (built != null) cache.put(c, built);
+            // Only overwrite on a successful build — a failed/empty USDA fetch leaves
+            // the last-good cache (and DB row) in place instead of blanking the panel.
+            if (built != null) {
+                cache.put(c, built);
+                persist(c, built);
+            }
         }
+    }
+
+    /** Upsert a commodity's last-good result into the DB. */
+    private void persist(String commodity, Map<String, Object> built) {
+        try {
+            GrainStocksSnapshot snap = snapshotRepo.findByCommodity(commodity)
+                .orElseGet(GrainStocksSnapshot::new);
+            snap.setCommodity(commodity);
+            snap.setPayloadJson(mapper.writeValueAsString(built));
+            snapshotRepo.save(snap);
+        } catch (Exception e) {
+            System.err.println("[STOCKS] persist failed for " + commodity + ": " + e.getMessage());
+        }
+    }
+
+    /** Warm the in-memory cache from the persisted last-good rows. */
+    private void loadCacheFromDb() {
+        try {
+            for (GrainStocksSnapshot snap : snapshotRepo.findAll()) {
+                Map<String, Object> built = deserialize(snap.getPayloadJson());
+                if (built != null) cache.put(snap.getCommodity(), built);
+            }
+        } catch (Exception e) {
+            System.err.println("[STOCKS] DB warm failed: " + e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> deserialize(String json) {
+        if (json == null || json.isBlank()) return null;
+        try { return mapper.readValue(json, LinkedHashMap.class); }
+        catch (Exception e) { return null; }
     }
 
     /* ── load + parse ───────────────────────────────────────────────────── */
@@ -139,6 +192,12 @@ public class GrainStocksService {
     public Map<String, Object> getStocks(String commodity) {
         String key = commodity == null ? "" : commodity.toUpperCase();
         Map<String, Object> cached = cache.get(key);
+        if (cached == null) {
+            // Cold cache (e.g. a request lands before prewarm finishes) — fall back to the DB.
+            Map<String, Object> fromDb = snapshotRepo.findByCommodity(key)
+                .map(s -> deserialize(s.getPayloadJson())).orElse(null);
+            if (fromDb != null) { cache.put(key, fromDb); cached = fromDb; }
+        }
         if (cached != null) return new LinkedHashMap<>(cached);
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("commodity", key);
@@ -162,14 +221,22 @@ public class GrainStocksService {
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> fetchNass(URI url) {
-        try {
-            ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.GET, null, Map.class);
-            Object data = resp.getBody() == null ? null : resp.getBody().get("data");
-            return data instanceof List ? (List<Map<String, Object>>) data : Collections.emptyList();
-        } catch (Exception e) {
-            System.err.println("[STOCKS] fetch failed: " + e.getClass().getSimpleName() + " - " + e.getMessage());
-            return Collections.emptyList();
+        // NASS can be flaky under report-day load; retry a few times before giving up.
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.GET, null, Map.class);
+                Object data = resp.getBody() == null ? null : resp.getBody().get("data");
+                return data instanceof List ? (List<Map<String, Object>>) data : Collections.emptyList();
+            } catch (Exception e) {
+                System.err.println("[STOCKS] fetch attempt " + attempt + " failed: "
+                    + e.getClass().getSimpleName() + " - " + e.getMessage());
+                if (attempt < 3) {
+                    try { Thread.sleep(1500L * attempt); }
+                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+                }
+            }
         }
+        return Collections.emptyList();
     }
     private static Long parseBu(Object v) {
         if (v == null) return null;
