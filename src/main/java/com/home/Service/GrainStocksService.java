@@ -71,6 +71,21 @@ public class GrainStocksService {
         }
     }
 
+    /**
+     * Second daily refresh in the early afternoon. Grain Stocks releases at noon
+     * Eastern (11 AM Central) — after the morning run — and its release date moves
+     * each quarter (late Jan / Mar / Jun 30 / late Sep), so rather than hard-code
+     * four shifting report dates we just refresh again at 11:45 AM Central (~45 min
+     * after release). On report days this picks up the new quarter same-day; on
+     * every other day it's a harmless no-op.
+     */
+    @Scheduled(cron = "0 45 11 * * *", zone = "America/Chicago")
+    public void afternoonRefresh() {
+        try { refresh(); } catch (Exception e) {
+            System.err.println("[STOCKS] afternoon load failed: " + e.getMessage());
+        }
+    }
+
     public void refresh() {
         for (String c : COMMODITIES) {
             Map<String, Object> built = load(c);
