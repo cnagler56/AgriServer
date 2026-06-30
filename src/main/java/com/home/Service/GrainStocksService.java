@@ -64,27 +64,15 @@ public class GrainStocksService {
         }, "stocks-prewarm").start();
     }
 
+    /**
+     * Daily safety-net refresh (6:35 AM Central). The precise release-day burst is
+     * driven by admin-entered dates in ReportScheduleService; this just ensures the
+     * data is never more than ~a day stale even if a release date wasn't set.
+     */
     @Scheduled(cron = "0 35 6 * * *", zone = "America/Chicago")
     public void scheduledRefresh() {
         try { refresh(); } catch (Exception e) {
             System.err.println("[STOCKS] scheduled load failed: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Report-release burst. Grain Stocks publishes at noon Eastern (11 AM Central),
-     * after the morning run, and its date moves each quarter (late Jan / Mar / Jun 30
-     * / late Sep) — so instead of hard-coding shifting report days we fire a cluster
-     * of attempts right after release: 12:01, 12:04, 12:08, 12:15, 12:25 ET. The first
-     * lands ~1 minute after release; the later ones cover NASS's ingestion lag (the
-     * data isn't queryable the instant the press release hits). A fetch that comes
-     * back empty just retries on the next tick and never overwrites the last-good value.
-     * Date-agnostic, so it covers all four quarterly reports with no maintenance.
-     */
-    @Scheduled(cron = "0 1,4,8,15,25 11 * * *", zone = "America/Chicago")
-    public void reportBurstRefresh() {
-        try { refresh(); } catch (Exception e) {
-            System.err.println("[STOCKS] burst load failed: " + e.getMessage());
         }
     }
 
