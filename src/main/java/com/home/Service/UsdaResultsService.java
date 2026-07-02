@@ -71,10 +71,22 @@ public class UsdaResultsService {
 		final double usda = chosen.yield();
 		final LocalDateTime cutoff = chosen.cutoff();
 
+		// Fresh-per-report window: a guess only counts for THIS report if it was
+		// submitted after the PREVIOUS report was published. That's the latest
+		// cutoff strictly older than this report's — so August's guesses don't
+		// carry into September, October, etc. Null (no earlier report) means the
+		// window opens at the start of the season, catching all pre-season guesses.
+		final LocalDateTime windowStart = periods.stream()
+			.map(PeriodYield::cutoff)
+			.filter(c -> c != null && cutoff != null && c.isBefore(cutoff))
+			.max(Comparator.naturalOrder())
+			.orElse(null);
+
 		out.put("year", year);
 		out.put("period", chosen.refPeriod());
 		out.put("usdaYield", usda);
 		out.put("cutoff", cutoff == null ? null : cutoff.toString());
+		out.put("windowStart", windowStart == null ? null : windowStart.toString());
 		out.put("availablePeriods", periods.stream()
 			.map(p -> {
 				Map<String, Object> m = new LinkedHashMap<>();
@@ -90,7 +102,8 @@ public class UsdaResultsService {
 		Map<String, YieldGuess> latestByUser = new HashMap<>();
 		for (YieldGuess g : raw) {
 			if (g.getEstimate() == null || g.getDate() == null) continue;
-			if (cutoff != null && !g.getDate().isBefore(cutoff)) continue;   // ← the cheat-proof gate
+			if (cutoff != null && !g.getDate().isBefore(cutoff)) continue;   // ← the cheat-proof gate (upper bound)
+			if (windowStart != null && g.getDate().isBefore(windowStart)) continue;  // ← this report's window only (lower bound)
 
 			String key = (g.getUserId() != null && g.getUserId() > 0)
 				? "u:" + g.getUserId()
