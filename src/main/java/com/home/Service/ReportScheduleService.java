@@ -2,8 +2,11 @@ package com.home.Service;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 import org.springframework.scheduling.annotation.Scheduled;
@@ -78,6 +81,29 @@ public class ReportScheduleService {
 	public List<ReportReleaseDate> all() {
 		return dateRepo.findAllByOrderByReportKeyAscReleaseDateAsc();
 	}
+
+	/**
+	 * The currently-open Crop Production guessing round: the next release date on
+	 * or after today. Its month is the report farmers are now guessing — once
+	 * that report publishes, this rolls to the following date automatically. Used
+	 * by the challenge banner so it always points at the right round (guesses from
+	 * earlier rounds don't carry forward under the fresh-per-report scoring).
+	 */
+	public OpenRound openCropRound() {
+		LocalDate today = LocalDate.now(EASTERN);
+		LocalDate next = dateRepo.findAllByOrderByReportKeyAscReleaseDateAsc().stream()
+			.filter(d -> "CROP_PRODUCTION".equals(d.getReportKey()))
+			.map(ReportReleaseDate::getReleaseDate)
+			.filter(d -> !d.isBefore(today))
+			.min(Comparator.naturalOrder())
+			.orElse(null);
+		if (next == null) return new OpenRound(null, null, false);
+		String label = next.getMonth().getDisplayName(TextStyle.FULL, Locale.US);
+		return new OpenRound(label, next.toString(), true);
+	}
+
+	/** The open round for the challenge banner. label/closesOn null when unscheduled. */
+	public record OpenRound(String label, String closesOn, boolean scheduled) {}
 
 	/** Replace one report's full set of dates with the supplied list. */
 	@Transactional
