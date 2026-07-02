@@ -43,6 +43,16 @@ public class ReportDateController {
 		return service.all();
 	}
 
+	/**
+	 * Public: the open Crop Production guessing round (next release on/after
+	 * today) so the challenge page can tell farmers which report they're now
+	 * guessing. No auth — it exposes only a month label and a public USDA date.
+	 */
+	@GetMapping("/api/report-dates/open-round")
+	public ReportScheduleService.OpenRound openRound() {
+		return service.openCropRound();
+	}
+
 	/** Replace one report's dates with the supplied ISO-date list. */
 	@PostMapping("/api/admin/report-dates")
 	public List<ReportReleaseDate> set(
