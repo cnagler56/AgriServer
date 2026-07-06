@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -172,6 +173,157 @@ public class UsdaReportsService {
 
 	private int rankOfPeriod(String p) {
 		return p == null ? 0 : REF_PERIOD_RANK.getOrDefault(p, 0);
+	}
+
+	/* ── CROP PRODUCTION REPORT SUMMARY ─────────────────────────────────────── */
+
+	/**
+	 * A one-glance summary of the latest Crop Production report for a year:
+	 * national yield, production (bu) and harvested acres, each with its change
+	 * vs the previous report (month-over-month) and vs last year (year-over-year),
+	 * plus the biggest state yield movers. Reads entirely from stored snapshots.
+	 *
+	 * @param year null → current season (falls back to prior year if none yet);
+	 *             pass an explicit year to review a past report (used for testing
+	 *             against last year's real NASS numbers).
+	 */
+	public Map<String, Object> getReportSummary(String commodity, Integer year) {
+		commodity = commodity.toUpperCase();
+		int currentYear = Year.now().getValue();
+		refreshYieldIfStale(commodity, currentYear, currentYear - 1);
+
+		int useYear = year != null ? year : currentYear;
+		List<YieldSnapshot> rows = yieldRepo.findByCommodityAndYear(commodity, useYear);
+		if (rows.isEmpty() && year == null) {                 // current season not out yet
+			useYear = currentYear - 1;
+			rows = yieldRepo.findByCommodityAndYear(commodity, useYear);
+		}
+
+		Map<String, Object> out = new LinkedHashMap<>();
+		out.put("commodity", commodity);
+		out.put("year", useYear);
+		if (rows.isEmpty()) {
+			out.put("message", "No Crop Production data for " + commodity + " " + useYear + " yet.");
+			return out;
+		}
+
+		// Per-period rollups (national yield / production / acres + per-state yields).
+		Map<String, PeriodAgg> byPeriod = aggregateByPeriod(rows);
+		List<String> byRecency = byPeriod.keySet().stream()
+			.sorted((a, b) -> Integer.compare(rankOfPeriod(b), rankOfPeriod(a)))
+			.toList();
+
+		String latestP = byRecency.get(0);
+		String prevP   = byRecency.size() > 1 ? byRecency.get(1) : null;
+		PeriodAgg latest = byPeriod.get(latestP);
+		PeriodAgg prev   = prevP == null ? null : byPeriod.get(prevP);
+
+		// Prior-year comparison uses last year's most final (highest-ranked) report.
+		Map<String, PeriodAgg> priorByPeriod = aggregateByPeriod(
+			yieldRepo.findByCommodityAndYear(commodity, useYear - 1));
+		PeriodAgg priorFinal = priorByPeriod.entrySet().stream()
+			.max(Comparator.comparingInt(e -> rankOfPeriod(e.getKey())))
+			.map(Map.Entry::getValue).orElse(null);
+
+		out.put("latestPeriod", latestP);
+		out.put("previousPeriod", prevP);
+		out.put("priorYear", useYear - 1);
+		out.put("stateCount", latest.stateYield.size());
+		out.put("national", Map.of(
+			"yield",      metric(latest.nationalYield(), agg(prev, PeriodAgg::nationalYield), agg(priorFinal, PeriodAgg::nationalYield)),
+			"production", metric(latest.production(),    agg(prev, PeriodAgg::production),    agg(priorFinal, PeriodAgg::production)),
+			"acres",      metric(latest.acres(),         agg(prev, PeriodAgg::acres),         agg(priorFinal, PeriodAgg::acres))
+		));
+
+		// State yield movers: latest vs previous report, else vs last year.
+		PeriodAgg basis = prev != null ? prev : priorFinal;
+		out.put("moverBasis", prev != null ? ("vs " + prevP) : ("vs " + (useYear - 1)));
+		List<Map<String, Object>> movers = new ArrayList<>();
+		if (basis != null) {
+			for (Map.Entry<String, Double> e : latest.stateYield.entrySet()) {
+				Double before = basis.stateYield.get(e.getKey());
+				if (before == null) continue;
+				Map<String, Object> m = new LinkedHashMap<>();
+				m.put("state", e.getKey());
+				m.put("latest", e.getValue());
+				m.put("previous", before);
+				m.put("change", round1(e.getValue() - before));
+				movers.add(m);
+			}
+		}
+		movers.sort((a, b) -> Double.compare(num(b.get("change")), num(a.get("change"))));
+		out.put("topGainers", movers.stream().filter(m -> num(m.get("change")) > 0).limit(5).toList());
+		out.put("topDecliners", movers.stream().filter(m -> num(m.get("change")) < 0)
+			.sorted((a, b) -> Double.compare(num(a.get("change")), num(b.get("change")))).limit(5).toList());
+		return out;
+	}
+
+	/** Force-load a past year's yield + harvested acres from NASS (test backfill). */
+	public void backfillYear(String commodity, int year) {
+		String c = commodity.toUpperCase();
+		fetchYieldForYear(c, year);
+		fetchHarvestedForYear(c, year);
+	}
+
+	private Map<String, PeriodAgg> aggregateByPeriod(List<YieldSnapshot> rows) {
+		Map<String, PeriodAgg> byPeriod = new LinkedHashMap<>();
+		for (YieldSnapshot s : rows) {
+			if (s.getReferencePeriod() == null || s.getYieldBu() == null) continue;
+			PeriodAgg agg = byPeriod.computeIfAbsent(s.getReferencePeriod(), k -> new PeriodAgg());
+			agg.stateYield.put(s.getState(), s.getYieldBu());
+			if (s.getAcres() != null) agg.stateAcres.put(s.getState(), s.getAcres());
+		}
+		return byPeriod;
+	}
+
+	private Map<String, Object> metric(Double latest, Double previous, Double priorYear) {
+		Map<String, Object> m = new LinkedHashMap<>();
+		m.put("latest", latest);
+		m.put("previous", previous);
+		m.put("priorYear", priorYear);
+		m.put("momChange", (latest != null && previous != null) ? round1(latest - previous) : null);
+		m.put("yoyChange", (latest != null && priorYear != null) ? round1(latest - priorYear) : null);
+		return m;
+	}
+
+	private static Double agg(PeriodAgg p, java.util.function.Function<PeriodAgg, Double> f) {
+		return p == null ? null : f.apply(p);
+	}
+	private static double num(Object v) { return v == null ? 0 : ((Number) v).doubleValue(); }
+	private static double round1(double v) { return Math.round(v * 10) / 10.0; }
+
+	/** Rollup of one report period: per-state yields + harvested acres. */
+	private static final class PeriodAgg {
+		final Map<String, Double> stateYield = new LinkedHashMap<>();
+		final Map<String, Long>   stateAcres = new LinkedHashMap<>();
+
+		/** Acre-weighted national yield, or null if no acres are attached. */
+		Double nationalYield() {
+			double wsum = 0, asum = 0;
+			for (Map.Entry<String, Double> e : stateYield.entrySet()) {
+				Long a = stateAcres.get(e.getKey());
+				if (a == null) continue;
+				wsum += e.getValue() * a;
+				asum += a;
+			}
+			return asum > 0 ? Math.round((wsum / asum) * 10) / 10.0 : null;
+		}
+		/** Total production in bushels = Σ(state yield × harvested acres). */
+		Double production() {
+			double p = 0; boolean any = false;
+			for (Map.Entry<String, Double> e : stateYield.entrySet()) {
+				Long a = stateAcres.get(e.getKey());
+				if (a == null) continue;
+				p += e.getValue() * a; any = true;
+			}
+			return any ? p : null;
+		}
+		/** Total harvested acres. */
+		Double acres() {
+			double a = 0; boolean any = false;
+			for (Long v : stateAcres.values()) { a += v; any = true; }
+			return any ? a : null;
+		}
 	}
 
 	private void refreshYieldIfStale(String commodity, int currentYear, int priorYear) {
