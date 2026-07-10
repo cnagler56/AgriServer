@@ -1,6 +1,7 @@
 package com.home.Service;
 
 import java.time.LocalDate;
+import java.time.Month;
 import java.time.ZoneId;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
@@ -8,6 +9,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -83,11 +85,22 @@ public class ReportScheduleService {
 	}
 
 	/**
-	 * The currently-open Crop Production guessing round: the next release date on
-	 * or after today. Its month is the report farmers are now guessing — once
-	 * that report publishes, this rolls to the following date automatically. Used
-	 * by the challenge banner so it always points at the right round (guesses from
-	 * earlier rounds don't carry forward under the fresh-per-report scoring).
+	 * Months whose Crop Production report actually carries corn/soybean yield
+	 * forecasts: August–November in-season, plus the January annual summary.
+	 * Earlier reports (June/July) have no survey-based yield, so there's no
+	 * yield round to guess — the summer guesses all count toward August.
+	 */
+	private static final Set<Month> YIELD_MONTHS = Set.of(
+		Month.AUGUST, Month.SEPTEMBER, Month.OCTOBER, Month.NOVEMBER, Month.JANUARY);
+
+	/**
+	 * The currently-open yield guessing round: the next Crop Production release
+	 * on or after today that will publish yield numbers. Its month is the report
+	 * farmers are now guessing — once that report publishes, this rolls to the
+	 * following date automatically. Non-yield releases (e.g. July) are skipped,
+	 * so they can stay in the admin date list for the data-refresh burst without
+	 * mislabeling the round. Used by the challenge banner; guesses from earlier
+	 * rounds don't carry forward under the fresh-per-report scoring.
 	 */
 	public OpenRound openCropRound() {
 		LocalDate today = LocalDate.now(EASTERN);
@@ -95,6 +108,7 @@ public class ReportScheduleService {
 			.filter(d -> "CROP_PRODUCTION".equals(d.getReportKey()))
 			.map(ReportReleaseDate::getReleaseDate)
 			.filter(d -> !d.isBefore(today))
+			.filter(d -> YIELD_MONTHS.contains(d.getMonth()))
 			.min(Comparator.naturalOrder())
 			.orElse(null);
 		if (next == null) return new OpenRound(null, null, false);
