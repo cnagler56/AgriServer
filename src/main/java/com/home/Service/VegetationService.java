@@ -141,8 +141,13 @@ public class VegetationService {
 			return;
 		}
 
+		// Compute everything first, then write in one batch at the end. The API
+		// serves the newest stored week, so a county-by-county write would let a
+		// page load mid-ingest see a half-painted map (first states colored, the
+		// rest grey). Batching shrinks that window to a moment — readers see the
+		// previous complete week until the new one is essentially all there.
 		LocalDateTime now = LocalDateTime.now();
-		int saved = 0;
+		List<VegetationSnapshot> batch = new ArrayList<>();
 		for (County c : cs) {
 			double sum = 0;
 			int cnt = 0;
@@ -167,10 +172,17 @@ public class VegetationService {
 			s.setVhi(Math.round((sum / cnt) * 10) / 10.0);
 			s.setCells(cnt);
 			s.setFetchedAt(now);
-			repo.save(s);
-			saved++;
+			batch.add(s);
 		}
-		System.out.println("[VEG] stored VHI for " + saved + " counties, week "
+		// Sanity gate: a sparse result (truncated download, half-filled composite)
+		// must not become the "latest week" the API serves. Keep the last good week.
+		if (batch.size() < cs.size() / 2) {
+			System.err.println("[VEG] only " + batch.size() + " of " + cs.size()
+				+ " counties resolved — keeping previous week instead");
+			return;
+		}
+		repo.saveAll(batch);
+		System.out.println("[VEG] stored VHI for " + batch.size() + " counties, week "
 			+ avail.year() + "-" + avail.week());
 	}
 
