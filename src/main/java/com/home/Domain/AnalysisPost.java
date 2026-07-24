@@ -4,11 +4,11 @@ import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 /**
@@ -35,8 +35,11 @@ public class AnalysisPost {
 	@JsonProperty
 	private String title;
 
-	/** Markdown body. */
-	@Lob
+	/**
+	 * Markdown body. Explicit LONGTEXT: a bare @Lob let MySQL default the column
+	 * to TINYTEXT (255 bytes), which truncated real reports and 500'd on save.
+	 */
+	@Column(columnDefinition = "LONGTEXT")
 	@JsonProperty
 	private String body;
 
