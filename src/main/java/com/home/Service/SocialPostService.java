@@ -226,6 +226,26 @@ public class SocialPostService {
 
 	public List<SocialPost> recent() { return repo.findTop20ByOrderByCreatedAtDesc(); }
 
+	/** Non-destructive check of the X credentials (GET /2/users/me). Sends no tweet. */
+	public Map<String, Object> verify() {
+		Map<String, Object> out = new LinkedHashMap<>();
+		out.put("configured", x.isConfigured());
+		if (!x.isConfigured()) {
+			out.put("ok", false);
+			out.put("error", "X API credentials are not set on the server.");
+			return out;
+		}
+		try {
+			String handle = x.verifyHandle();
+			out.put("ok", true);
+			out.put("handle", handle);
+		} catch (Exception e) {
+			out.put("ok", false);
+			out.put("error", e.getMessage());
+		}
+		return out;
+	}
+
 	/* ── infra ──────────────────────────────────────────────────────────── */
 
 	private AnthropicClient client() {
