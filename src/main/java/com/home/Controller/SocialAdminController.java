@@ -47,6 +47,13 @@ public class SocialAdminController {
 		return social.recent();
 	}
 
+	/** Verify the X credentials without posting (calls GET /2/users/me). */
+	@GetMapping("/api/admin/social/verify")
+	public Map<String, Object> verify(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		requireAdmin(token);
+		return social.verify();
+	}
+
 	/** Compose the next (or a chosen) post without publishing or saving it. */
 	@PostMapping("/api/admin/social/preview")
 	public Map<String, Object> preview(

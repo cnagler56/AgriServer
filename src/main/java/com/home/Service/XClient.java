@@ -16,6 +16,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,6 +39,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class XClient {
 
 	private static final String TWEETS_URL = "https://api.x.com/2/tweets";
+	private static final String USERS_ME_URL = "https://api.x.com/2/users/me";
 
 	private final RestTemplate rt;
 	private final ObjectMapper mapper = new ObjectMapper();
@@ -79,6 +81,40 @@ public class XClient {
 		JsonNode id = node.path("data").path("id");
 		if (id.isMissingNode()) throw new IllegalStateException("X response had no tweet id: " + resp.getBody());
 		return id.asText();
+	}
+
+	/**
+	 * Non-destructive credential check: calls GET /2/users/me and returns the
+	 * authenticated handle. Confirms the keys, the Project enrollment, and
+	 * user-context auth all work without posting anything. Throws with X's own
+	 * error detail on failure (e.g. 403 client-not-enrolled, 401 bad keys).
+	 */
+	public String verifyHandle() throws Exception {
+		if (!isConfigured()) throw new IllegalStateException("X API credentials not configured");
+		HttpHeaders h = new HttpHeaders();
+		h.set(HttpHeaders.AUTHORIZATION, authHeader("GET", USERS_ME_URL));
+		try {
+			ResponseEntity<String> resp = rt.exchange(
+				USERS_ME_URL, HttpMethod.GET, new HttpEntity<>(h), String.class);
+			JsonNode node = mapper.readTree(resp.getBody() == null ? "{}" : resp.getBody());
+			return node.path("data").path("username").asText("");
+		} catch (HttpStatusCodeException e) {
+			throw new IllegalStateException(
+				e.getStatusCode().value() + " — " + extractDetail(e.getResponseBodyAsString()));
+		}
+	}
+
+	/** Pull the human-readable reason out of X's JSON error body. */
+	private String extractDetail(String body) {
+		if (body == null || body.isBlank()) return "no response body";
+		try {
+			JsonNode n = mapper.readTree(body);
+			if (n.hasNonNull("detail")) return n.path("detail").asText();
+			if (n.hasNonNull("title")) return n.path("title").asText();
+			JsonNode errs = n.path("errors");
+			if (errs.isArray() && errs.size() > 0) return errs.get(0).path("message").asText(body);
+		} catch (Exception ignore) { /* fall through to raw */ }
+		return body.length() > 300 ? body.substring(0, 300) : body;
 	}
 
 	/* ── OAuth 1.0a signing ─────────────────────────────────────────────── */
