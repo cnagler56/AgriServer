@@ -50,11 +50,16 @@ public class ReportScheduleService {
 	}
 
 	/**
-	 * Release-day burst at the noon-ET window: 12:01/04/08/15/25 ET. The first lands
-	 * ~1 min after release; the later ones ride out USDA's ingestion lag. Refreshes a
-	 * report only if today is in its admin date list; otherwise it's a cheap no-op.
+	 * Release-day burst. USDA targets noon Eastern for WASDE / Crop Production /
+	 * Grain Stocks, but Quick Stats can lag the release by a while and the exact
+	 * clock has burned us before — a tight window meant a release could slip
+	 * through untouched all day. So instead we sweep every 20 minutes from
+	 * 11:00 AM to 1:40 PM Central (≈12:00–2:40 ET), covering the release plus
+	 * ingest lag. The refreshes are idempotent upserts, so the first sweep that
+	 * finds live data wins and the later ones are cheap repeats. Fires a report
+	 * only if today is in its admin date list; otherwise it's a no-op.
 	 */
-	@Scheduled(cron = "0 1,4,8,15,25 11 * * *", zone = "America/Chicago")
+	@Scheduled(cron = "0 1,21,41 11,12,13 * * *", zone = "America/Chicago")
 	public void releaseBurst() {
 		LocalDate today = LocalDate.now(EASTERN);
 		if (isReleaseDay("CROP_PRODUCTION", today)) run("CROP_PRODUCTION", usdaReports::refreshMonthlyCropProduction);
@@ -114,14 +119,38 @@ public class ReportScheduleService {
 		}
 		dateRepo.deleteByReportKey(key);
 		List<ReportReleaseDate> rows = new ArrayList<>();
+		boolean todayIsRelease = false;
+		LocalDate today = LocalDate.now(EASTERN);
 		if (dates != null) {
 			for (LocalDate d : dates.stream().filter(Objects::nonNull).distinct().sorted().toList()) {
 				ReportReleaseDate row = new ReportReleaseDate();
 				row.setReportKey(key);
 				row.setReleaseDate(d);
 				rows.add(row);
+				if (d.equals(today)) todayIsRelease = true;
 			}
 		}
-		return dateRepo.saveAll(rows);
+		List<ReportReleaseDate> saved = dateRepo.saveAll(rows);
+
+		// Fire-on-save: if the admin just marked TODAY as a release day, don't make
+		// them wait for the next scheduled sweep — pull this report right now. The
+		// admin page setting the day is exactly the signal that the report is out.
+		// Runs off-thread so the save returns immediately (a live NASS pull is slow).
+		if (todayIsRelease) fireRefreshAsync(key);
+		return saved;
+	}
+
+	/** Kick off one report's refresh on a background thread (used by fire-on-save). */
+	private void fireRefreshAsync(String key) {
+		Runnable refresh = switch (key) {
+			case "CROP_PRODUCTION" -> usdaReports::refreshMonthlyCropProduction;
+			case "WASDE"           -> supplyDemand::ingestAll;
+			case "GRAIN_STOCKS"    -> grainStocks::refresh;
+			default                -> null;
+		};
+		if (refresh == null) return;
+		Thread t = new Thread(() -> run(key, refresh), "report-fire-on-save-" + key);
+		t.setDaemon(true);
+		t.start();
 	}
 }

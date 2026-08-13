@@ -1,9 +1,12 @@
 package com.home.Controller;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.CookieValue;
@@ -20,6 +23,8 @@ import com.home.Domain.User;
 import com.home.Domain.YieldGuess;
 import com.home.Repository.YieldGuessRepository;
 import com.home.Service.SessionService;
+import com.home.Service.UsdaReportsService;
+import com.home.Service.UsdaReportsService.PeriodYield;
 
 @RestController
 @RequestMapping("/api/yield-guess")
@@ -30,15 +35,25 @@ public class YieldGuessController {
 
 	private final YieldGuessRepository repo;
 	private final SessionService sessionService;
+	private final UsdaReportsService reportsService;
 
-	public YieldGuessController(YieldGuessRepository repo, SessionService sessionService) {
+	public YieldGuessController(YieldGuessRepository repo, SessionService sessionService,
+			UsdaReportsService reportsService) {
 		this.repo = repo;
 		this.sessionService = sessionService;
+		this.reportsService = reportsService;
 	}
 
 	/**
-	 * Public roster: one current standing per user for the active crop year, each
-	 * decorated with how it changed since that user's previous guess.
+	 * Public roster for the CURRENTLY OPEN round: one current standing per user,
+	 * each decorated with how it changed since that user's previous guess.
+	 *
+	 * Scoped to the open round — guesses submitted after the most recently
+	 * published report's cutoff. Once a report publishes, its round's guesses roll
+	 * off the live roster automatically (they live on in the results leaderboard,
+	 * which scores them per period), so the board always shows the round farmers
+	 * are guessing now rather than accumulating every guess of the crop year.
+	 * Before any report is published (window start null), the full season shows.
 	 */
 	@GetMapping("/{commodity}")
 	public List<RosterEntry> roster(@PathVariable String commodity) {
@@ -46,17 +61,34 @@ public class YieldGuessController {
 		int currentYear = java.time.Year.now().getValue();
 		Integer year = repo.findActiveYear(c, currentYear);
 		if (year == null) return List.of();
-		return foldRoster(repo.findRevisions(c, year, currentYear));
+		return foldRoster(currentRound(c, repo.findRevisions(c, year, currentYear)));
 	}
 
-	/** One user's change log for the active crop year (oldest → newest). */
+	/** One user's change log for the current open round (oldest → newest). */
 	@GetMapping("/{commodity}/history/{userId}")
 	public List<YieldGuess> history(@PathVariable String commodity, @PathVariable Long userId) {
 		String c = commodity.toUpperCase();
 		int currentYear = java.time.Year.now().getValue();
 		Integer year = repo.findActiveYear(c, currentYear);
 		if (year == null) return List.of();
-		return repo.findUserRevisions(c, userId, year, currentYear);
+		return currentRound(c, repo.findUserRevisions(c, userId, year, currentYear));
+	}
+
+	/**
+	 * Keep only guesses that belong to the open round — those submitted strictly
+	 * after the newest published report's cutoff. Null cutoff (no report out yet)
+	 * means the season hasn't started scoring, so everything is still in play.
+	 */
+	private List<YieldGuess> currentRound(String commodity, List<YieldGuess> revisions) {
+		LocalDateTime windowStart = reportsService.getNationalYieldByPeriod(commodity).stream()
+			.map(PeriodYield::cutoff)
+			.filter(Objects::nonNull)
+			.max(Comparator.naturalOrder())
+			.orElse(null);
+		if (windowStart == null) return revisions;
+		return revisions.stream()
+			.filter(g -> g.getDate() != null && g.getDate().isAfter(windowStart))
+			.toList();
 	}
 
 	/**
