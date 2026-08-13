@@ -26,10 +26,41 @@ public final class CropCommentaryPrompt {
 		- Plain, direct language. No headings, no markdown, no bullet lists, no disclaimers.
 		""";
 
-	/** Assemble the user message from the report summary figures. */
-	@SuppressWarnings("unchecked")
+	/** Role + rules for the combined recap that covers every crop in one write-up. */
+	public static final String COMBINED_SYSTEM = """
+		You are an agricultural market analyst writing for farmers on an ag-data website.
+		You are given figures from the latest USDA Crop Production report for several crops
+		(corn, soybeans, wheat). Write one cohesive recap of 10-12 sentences (roughly
+		200-260 words) covering ALL the crops provided. Rules:
+		- Use ONLY the numbers provided. Do not invent data, prices, causes, or forecasts.
+		- Give each crop a few sentences: its national yield and how it moved vs the previous
+		  report and vs last year, its production, and a notable state mover or two.
+		- Where the numbers invite it, briefly compare how the crops moved relative to each other.
+		- Cover the crops in the order given. If a crop has no figures, simply omit it.
+		- Plain, direct, flowing prose. No headings, no markdown, no bullet lists, no disclaimers.
+		""";
+
+	/** Assemble the user message for a single-commodity recap. */
 	public static String user(String commodity, Map<String, Object> s) {
 		StringBuilder sb = new StringBuilder();
+		appendCommodity(sb, commodity, s);
+		return sb.toString();
+	}
+
+	/** Assemble one user message covering several commodities, in map order. */
+	public static String combinedUser(Map<String, Map<String, Object>> summariesByCommodity) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("USDA Crop Production report — figures for each crop follow.\n\n");
+		for (Map.Entry<String, Map<String, Object>> e : summariesByCommodity.entrySet()) {
+			appendCommodity(sb, e.getKey(), e.getValue());
+			sb.append("\n");
+		}
+		return sb.toString();
+	}
+
+	/** Append one commodity's block of report figures to the running message. */
+	@SuppressWarnings("unchecked")
+	private static void appendCommodity(StringBuilder sb, String commodity, Map<String, Object> s) {
 		sb.append(commodity.toUpperCase()).append(" — USDA Crop Production, ")
 			.append(s.get("latestPeriod")).append(" ").append(s.get("year")).append("\n");
 		sb.append("Previous report period: ").append(strOr(s.get("previousPeriod"), "none")).append("\n");
@@ -45,7 +76,6 @@ public final class CropCommentaryPrompt {
 			(List<Map<String, Object>>) s.get("topGainers"));
 		appendMovers(sb, "Biggest yield decliners " + strOr(s.get("moverBasis"), ""),
 			(List<Map<String, Object>>) s.get("topDecliners"));
-		return sb.toString();
 	}
 
 	/* ── helpers ────────────────────────────────────────────────────────── */

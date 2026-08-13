@@ -60,16 +60,54 @@ public class CropCommentaryService {
 		}
 
 		String cacheKey = commodity.toUpperCase() + "|" + summary.get("year") + "|" + summary.get("latestPeriod");
+		return generate(cacheKey, CropCommentaryPrompt.SYSTEM,
+			CropCommentaryPrompt.user(commodity, summary), 400L);
+	}
+
+	/** Crops folded into the combined recap, in the order they appear in it. */
+	private static final java.util.List<String> COMBINED_COMMODITIES =
+		java.util.List.of("CORN", "SOYBEANS", "WHEAT");
+
+	/**
+	 * One recap covering every crop that has a published report this period,
+	 * grounded in each crop's figures. Fails soft exactly like the per-crop recap:
+	 * no data or no API key → {@code available=false} and the UI hides it.
+	 */
+	public Commentary getCombinedCommentary(Integer year) {
+		java.util.LinkedHashMap<String, Map<String, Object>> summaries = new java.util.LinkedHashMap<>();
+		StringBuilder periodKey = new StringBuilder();
+		for (String c : COMBINED_COMMODITIES) {
+			Map<String, Object> s = reports.getReportSummary(c, year);
+			if (s.get("national") == null) continue;             // skip crops with no report yet
+			summaries.put(c, s);
+			periodKey.append(c).append(s.get("year")).append(s.get("latestPeriod")).append('|');
+		}
+		if (summaries.isEmpty()) {
+			return new Commentary("No report data to summarize yet.", null, null, false);
+		}
+		if (apiKey.isEmpty()) {
+			return new Commentary("AI commentary isn't configured.", null, null, false);
+		}
+		return generate("COMBINED|" + periodKey, CropCommentaryPrompt.COMBINED_SYSTEM,
+			CropCommentaryPrompt.combinedUser(summaries), 900L);
+	}
+
+	/**
+	 * Shared cache lookup + Claude call + fail-soft extraction. Returns the cached
+	 * recap when present, otherwise generates one, caches it, and returns it; any
+	 * error yields an {@code available=false} Commentary so callers never throw.
+	 */
+	private Commentary generate(String cacheKey, String system, String userMessage, long maxTokens) {
 		Commentary cached = cache.get(cacheKey);
 		if (cached != null) return cached;
 
 		try {
 			MessageCreateParams params = MessageCreateParams.builder()
 				.model("claude-opus-4-8")
-				.maxTokens(400L)
+				.maxTokens(maxTokens)
 				.outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
-				.system(CropCommentaryPrompt.SYSTEM)
-				.addUserMessage(CropCommentaryPrompt.user(commodity, summary))
+				.system(system)
+				.addUserMessage(userMessage)
 				.build();
 
 			Message resp = client().messages().create(params);

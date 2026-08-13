@@ -61,6 +61,17 @@ public class CropSummaryController {
 	}
 
 	/**
+	 * Public: one AI recap covering all crops (corn, soybeans, wheat) in a single
+	 * write-up, grounded in each crop's figures. The literal /all/ path takes
+	 * precedence over the {commodity} route above, so it isn't a commodity lookup.
+	 */
+	@GetMapping("/api/crop-summary/all/commentary")
+	public CropCommentaryService.Commentary combinedCommentary(
+			@RequestParam(required = false) Integer year) {
+		return commentary.getCombinedCommentary(year);
+	}
+
+	/**
 	 * Admin: pull a past year's real yields + harvested acres from NASS so the
 	 * summary can be tested against last year's published numbers.
 	 */
