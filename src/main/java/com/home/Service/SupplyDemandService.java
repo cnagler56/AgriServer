@@ -132,11 +132,19 @@ public class SupplyDemandService {
 		for (String c : COMMODITIES) {
 			List<SupplyDemand> rows = byCommodity.get(c);
 			if (rows == null || rows.isEmpty()) continue;
-			// De-dupe by (region, attribute, month) keeping the last — so if the same
-			// month appears in more than one source (e.g. a bundled file and an admin
-			// upload), it isn't double-counted.
+			// De-dupe true duplicates (the same data point appearing in more than one
+			// source, e.g. a bundled file and an admin upload) while keeping genuinely
+			// distinct points. The key must include market YEAR and UNIT, not just
+			// (region, attribute, month): WASDE lists "United States" both in the U.S.
+			// table (bushels) and inside the World table (metric tons), and each report
+			// carries several marketing years. Keying only on month collapsed those into
+			// one row — the metric World-table value overwrote the bushel one and was
+			// then dropped by the U.S. metric filter, so Beginning Stocks, Production,
+			// etc. vanished from the U.S. sheet and only a single year survived.
 			Map<String, SupplyDemand> dedup = new LinkedHashMap<>();
-			for (SupplyDemand r : rows) dedup.put(r.getRegion() + "|" + r.getAttribute() + "|" + r.getMonth(), r);
+			for (SupplyDemand r : rows)
+				dedup.put(r.getRegion() + "|" + r.getAttribute() + "|" + r.getMarketYear()
+					+ "|" + r.getMonth() + "|" + r.getUnit(), r);
 			List<SupplyDemand> finalRows = new ArrayList<>(dedup.values());
 			repo.deleteByCommodity(c);
 			repo.saveAll(finalRows);
